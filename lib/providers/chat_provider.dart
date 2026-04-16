@@ -1,12 +1,27 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/message.dart';
 
 class ChatProvider with ChangeNotifier {
-  List<Message> _messages = [];
+  final List<Message> _messages = [];
   bool _isLoading = false;
   VoidCallback? _onMessageComplete;
+
+  static const String _systemPrompt = '''You are Jobseeker AI, a professional career assistant created to help job seekers with career guidance, interview preparation, resume optimization, salary negotiation, and professional development.
+
+Your name is Jobseeker AI (not Qwen, not Claude, not any other AI). You are a specialized career assistant.
+
+Guidelines:
+- Always identify yourself as "Jobseeker AI" or "Jobseeker Assistance"
+- Provide practical, actionable career advice
+- Focus on job search strategies, interview tips, resume improvements, and professional growth
+- Be encouraging and supportive
+- Give specific examples when possible
+- Ask clarifying questions if needed
+
+Remember: You are Jobseeker AI, your role is to be a career companion for job seekers.''';
 
   List<Message> get messages => _messages;
   bool get isLoading => _isLoading;
@@ -27,47 +42,94 @@ class ChatProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
+    // Buat placeholder pesan AI yang kosong
+    final aiMsg = Message(
+      text: '',
+      isUser: false,
+      timestamp: DateTime.now(),
+    );
+    _messages.add(aiMsg);
+    int aiMsgIndex = _messages.length - 1;
+
     try {
-      final response = await http.post(
-        Uri.parse('http://localhost:11434/api/generate'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'model': 'qwen2.5-coder:3b',
-          'prompt': userMessage,
-          'stream': false,
-        }),
+      final fullPrompt = '$_systemPrompt\n\nUser: $userMessage\n\nJobseeker AI:';
+
+      String ollamaHost = 'localhost';
+      if (kIsWeb) {
+        ollamaHost = Uri.base.host;
+        if (ollamaHost.isEmpty || ollamaHost == '0.0.0.0') {
+          ollamaHost = 'localhost';
+        }
+      }
+
+      final client = http.Client();
+      final request = http.Request(
+        'POST',
+        Uri.parse('http://$ollamaHost:11434/api/generate'),
       );
+      
+      request.headers['Content-Type'] = 'application/json';
+      request.body = jsonEncode({
+        'model': 'qwen2.5-coder:3b',
+        'prompt': fullPrompt,
+        'stream': true, // Aktifkan streaming
+        'temperature': 0.7,
+      });
+
+      final response = await client.send(request);
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final aiMessage = Message(
-          text: data['response'],
-          isUser: false,
-          timestamp: DateTime.now(),
-        );
-        _messages.add(aiMessage);
+        _isLoading = false; // Matikan loading saat stream mulai masuk
+        notifyListeners();
+
+        StringBuffer accumulatedText = StringBuffer();
+        
+        // Baca stream data
+        await response.stream
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())
+            .forEach((line) {
+          if (line.trim().isNotEmpty) {
+            try {
+              final data = jsonDecode(line);
+              final String chunk = data['response'] ?? '';
+              accumulatedText.write(chunk);
+              
+              // Update pesan AI yang sudah ada di list
+              _messages[aiMsgIndex] = Message(
+                text: accumulatedText.toString(),
+                isUser: false,
+                timestamp: aiMsg.timestamp,
+              );
+              notifyListeners();
+            } catch (e) {
+              debugPrint('Error decoding stream line: $e');
+            }
+          }
+        });
       } else {
-        final errorMessage = Message(
+        _messages[aiMsgIndex] = Message(
           text: 'Error: ${response.statusCode}',
           isUser: false,
           timestamp: DateTime.now(),
         );
-        _messages.add(errorMessage);
+        _isLoading = false;
+        notifyListeners();
       }
+      client.close();
     } catch (e) {
-      final errorMessage = Message(
-        text: 'Error: $e',
+      _messages[aiMsgIndex] = Message(
+        text: 'Error: $e. Pastikan Ollama OLLAMA_HOST=0.0.0.0 & OLLAMA_ORIGINS="*" sudah diatur.',
         isUser: false,
         timestamp: DateTime.now(),
       );
-      _messages.add(errorMessage);
+      _isLoading = false;
+      notifyListeners();
     }
 
-    _isLoading = false;
-    notifyListeners();
-
-    // Call callback to focus the input field
-    _onMessageComplete?.call();
+    if (_onMessageComplete != null) {
+      _onMessageComplete?.call();
+    }
   }
 
   void clearMessages() {

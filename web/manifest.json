@@ -1,11 +1,11 @@
 {
-    "name": "ollama_chat",
-    "short_name": "ollama_chat",
+    "name": "Jobseeker AI",
+    "short_name": "Jobseeker AI",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFFFFF",
+    "theme_color": "#6366f1",
+    "description": "Jobseeker AI - Your Career Assistant powered by Qwen2.5-coder model.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
