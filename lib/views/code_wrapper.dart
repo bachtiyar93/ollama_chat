@@ -43,19 +43,18 @@ class CodeWrapper extends StatelessWidget {
                   ),
                 ),
                 InkWell(
-                  onTap: () => FlutterClipboard.copy(code).then(
-                    (value) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Code copied to clipboard'),
-                            duration: Duration(seconds: 1),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      }
-                    },
-                  ),
+                  onTap: () async {
+                    await FlutterClipboard.copy(code);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Code copied to clipboard'),
+                          duration: Duration(seconds: 1),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  },
                   child: Row(
                     children: [
                       Icon(
