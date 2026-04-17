@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/message.dart';
@@ -40,7 +39,7 @@ Guidelines:
     }
 
     int start = _messages.length > 11 ? _messages.length - 11 : 0;
-    List<Message> recentMessages = _messages.sublist(start, _messages.length > 0 ? _messages.length - 1 : 0);
+    List<Message> recentMessages = _messages.sublist(start, _messages.isNotEmpty ? _messages.length - 1 : 0);
 
     for (final msg in recentMessages) {
       chatMessages.add({
