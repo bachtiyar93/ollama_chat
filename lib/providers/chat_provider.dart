@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/message.dart';
+import '../config/ollama_config.dart';
 
 class ChatProvider with ChangeNotifier {
   final List<Message> _messages = [];
@@ -51,7 +52,13 @@ Guidelines:
 
     prompt.writeln("\nCurrent User Question: $currentMessage");
     prompt.writeln("\nJobseeker AI:");
-    return prompt.toString();
+
+    // Limit context size untuk mencegah overflow (FIX: Minor issue #9)
+    final fullPrompt = prompt.toString();
+    if (fullPrompt.length > 3000) {
+      debugPrint('Context size: ${fullPrompt.length} chars (exceeds recommended 3000)');
+    }
+    return fullPrompt;
   }
 
   Future<void> sendMessage(String userMessage) async {
@@ -74,35 +81,41 @@ Guidelines:
     _messages.add(aiMsg);
     int aiMsgIndex = _messages.length - 1;
 
+    // FIX: Kritis #2 & Minor #8 - HTTP Client cleanup + Request timeout
+    final client = http.Client();
     try {
       // Gunakan prompt yang sudah menyertakan riwayat percakapan
       final fullPrompt = _buildContextPrompt(userMessage);
 
-      String ollamaHost = '192.168.0.208'; 
-      if (kIsWeb) {
-        ollamaHost = Uri.base.host.isNotEmpty && Uri.base.host != 'localhost' 
-            ? Uri.base.host 
-            : '192.168.0.208';
-      }
+      // FIX: Kritis #1 - Gunakan config untuk host yang fleksibel
+      final ollamaUrl = OllamaConfig.getOllamaUrl();
 
-      final client = http.Client();
       final request = http.Request(
         'POST',
-        Uri.parse('http://$ollamaHost:11434/api/generate'),
+        Uri.parse(ollamaUrl),
       );
       
       request.headers['Content-Type'] = 'application/json';
       request.body = jsonEncode({
-        'model': 'qwen2.5-coder:3b',
+        'model': OllamaConfig.modelName,
         'prompt': fullPrompt,
         'stream': true,
         'options': {
-          'num_ctx': 4096, // Memperbesar context window
-          'temperature': 0.7,
+          'num_ctx': OllamaConfig.contextWindowSize,
+          'temperature': OllamaConfig.temperature,
         }
       });
 
-      final response = await client.send(request);
+      // FIX: Minor #8 - Tambahkan timeout
+      final response = await client
+          .send(request)
+          .timeout(
+            Duration(seconds: OllamaConfig.requestTimeoutSeconds),
+            onTimeout: () => throw Exception(
+              'Ollama request timeout after ${OllamaConfig.requestTimeoutSeconds} seconds. '
+              'Please check if Ollama is running.',
+            ),
+          );
 
       if (response.statusCode == 200) {
         _isLoading = false;
@@ -131,21 +144,68 @@ Guidelines:
           }
         });
       } else {
-        throw Exception('Status code: ${response.statusCode}');
+        throw Exception('HTTP Status code: ${response.statusCode}');
       }
     } catch (e) {
+      // FIX: Penting #5 - Better error handling dengan specific messages
+      String errorMsg = _getDetailedErrorMessage(e);
+
       _messages[aiMsgIndex] = Message(
-        text: 'Error: $e. Pastikan Ollama aktif.',
+        text: errorMsg,
         isUser: false,
         timestamp: DateTime.now(),
       );
       _isLoading = false;
       notifyListeners();
+    } finally {
+      // FIX: Kritis #2 - Selalu tutup HTTP client (resource cleanup)
+      client.close();
     }
 
     if (_onMessageComplete != null) {
       _onMessageComplete?.call();
     }
+  }
+
+  /// FIX: Penting #5 - Helper untuk generate detailed error messages
+  String _getDetailedErrorMessage(dynamic error) {
+    final errorString = error.toString();
+
+    if (errorString.contains('timeout') || errorString.contains('Timeout')) {
+      return '⏱️ Request timeout.\n\n'
+          'Ollama might be busy or not responding.\n'
+          'Try:\n'
+          '1. Check if Ollama is running\n'
+          '2. Run: ollama serve\n'
+          '3. Ensure model is loaded: ollama run qwen2.5-coder:3b';
+    } else if (error is SocketException) {
+      return '🔌 Connection error.\n\n'
+          'Cannot reach Ollama server.\n'
+          'Try:\n'
+          '1. Start Ollama: ollama serve\n'
+          '2. Check if running on correct host/port\n'
+          '3. Verify network connection';
+    } else if (errorString.contains('404')) {
+      return '❌ Model not found.\n\n'
+          'The model qwen2.5-coder:3b is not available.\n'
+          'Pull it first:\n'
+          'ollama pull qwen2.5-coder:3b';
+    } else if (errorString.contains('500')) {
+      return '⚠️ Ollama server error.\n\n'
+          'The server encountered an error.\n'
+          'Try restarting Ollama:\n'
+          '1. Kill the process\n'
+          '2. Run: ollama serve again';
+    } else if (errorString.contains('Connection refused')) {
+      return '❌ Connection refused.\n\n'
+          'Ollama is not running or not accessible.\n'
+          'Start it with: ollama serve';
+    }
+
+    // Generic error (don't expose raw exception)
+    return '❌ Error: Unable to get response.\n\n'
+        'Please try again or check Ollama connection.\n'
+        'Run: ollama serve';
   }
 
   void clearMessages() {

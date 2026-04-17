@@ -49,14 +49,20 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _setupFocusCallback() {
-    final chatProvider = context.read<ChatProvider>();
-    chatProvider.setOnMessageComplete(() {
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted && _focusNode.canRequestFocus) {
-          _focusNode.requestFocus();
-        }
+    try {
+      // FIX: Penting #7 - Null check untuk ChatProvider
+      final chatProvider = context.read<ChatProvider>();
+      chatProvider.setOnMessageComplete(() {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          // FIX: Penting #7 - Better null/state checks
+          if (mounted && _focusNode.canRequestFocus) {
+            _focusNode.requestFocus();
+          }
+        });
       });
-    });
+    } catch (e) {
+      debugPrint('Error setting up focus callback: $e');
+    }
   }
 
   void _scrollToBottom() {
@@ -69,6 +75,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    // FIX: Penting #4 - Remove scroll listener to prevent memory leak
+    _scrollController.removeListener(_scrollListener);
     _controller.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
