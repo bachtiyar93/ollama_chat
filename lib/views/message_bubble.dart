@@ -50,9 +50,13 @@ class MessageBubble extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.copy),
             onPressed: () => FlutterClipboard.copy(message.text).then(
-              (value) => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Copied to clipboard')),
-              ),
+              (value) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Copied to clipboard')),
+                  );
+                }
+              },
             ),
           ),
         ],

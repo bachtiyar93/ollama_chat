@@ -78,7 +78,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.normal,
-                    color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.7),
+                    color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.7),
                   ),
                 ),
               ],

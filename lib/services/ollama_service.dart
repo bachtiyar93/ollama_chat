@@ -63,7 +63,8 @@ class OllamaService {
   Future<bool> _checkOllamaStatus() async {
     if (kIsWeb) return true;
     try {
-      final result = await Process.run('curl', ['-s', 'http://localhost:11434/api/tags'])
+      // Gunakan IP LAN alih-alih localhost agar konsisten dengan binding Ollama
+      final result = await Process.run('curl', ['-s', 'http://192.168.0.208:11434/api/tags'])
           .timeout(const Duration(seconds: 5));
       return result.exitCode == 0;
     } catch (e) {

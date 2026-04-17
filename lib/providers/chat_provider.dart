@@ -54,11 +54,15 @@ Remember: You are Jobseeker AI, your role is to be a career companion for job se
     try {
       final fullPrompt = '$_systemPrompt\n\nUser: $userMessage\n\nJobseeker AI:';
 
-      String ollamaHost = 'localhost';
+      // Gunakan IP Address komputer yang menjalankan Ollama agar bisa diakses di LAN
+      String ollamaHost = '192.168.0.208'; 
+      
       if (kIsWeb) {
-        ollamaHost = Uri.base.host;
-        if (ollamaHost.isEmpty || ollamaHost == '0.0.0.0') {
-          ollamaHost = 'localhost';
+        // Jika berjalan di web, Uri.base.host akan mengambil host tempat web dihosting.
+        // Jika kita mengakses web via IP LAN, maka host-nya akan otomatis benar.
+        final webHost = Uri.base.host;
+        if (webHost.isNotEmpty && webHost != 'localhost' && webHost != '127.0.0.1') {
+          ollamaHost = webHost;
         }
       }
 

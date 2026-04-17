@@ -45,9 +45,13 @@ class CodeWrapper extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.copy, size: 16),
                 onPressed: () => FlutterClipboard.copy(code).then(
-                  (value) => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Code copied to clipboard')),
-                  ),
+                  (value) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Code copied to clipboard')),
+                      );
+                    }
+                  },
                 ),
               ),
             ],
