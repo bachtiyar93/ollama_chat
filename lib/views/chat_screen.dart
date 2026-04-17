@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../providers/chat_provider.dart';
-import '../providers/theme_provider.dart';
-import '../controllers/chat_controller.dart';
-import '../models/theme_mode.dart';
-import 'message_bubble.dart';
-import 'welcome_screen.dart';
+import '../providers/settings_provider.dart';
+import '../models/ai_provider.dart';
+import 'widgets/chat_bubble.dart';
+import 'widgets/settings_dialog.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -18,217 +16,155 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final FocusNode _focusNode = FocusNode();
-  late ChatController _chatController;
-  bool _conversationStarted = false;
-  bool _showScrollToBottom = false;
-  bool _isAutoScrolling = true;
 
   @override
   void initState() {
     super.initState();
-    _chatController = ChatController(context.read<ChatProvider>());
-    _setupFocusCallback();
-    _scrollController.addListener(_scrollListener);
-  }
-
-  void _scrollListener() {
-    // Jika user scroll ke atas (offset > 100 dari bawah), munculkan tombol "Scroll to Bottom"
-    // Karena ListView reverse: true, offset 0 adalah posisi paling bawah (terbaru)
-    if (_scrollController.offset > 100) {
-      if (!_showScrollToBottom) {
-        setState(() => _showScrollToBottom = true);
-      }
-      _isAutoScrolling = false;
-    } else {
-      if (_showScrollToBottom) {
-        setState(() => _showScrollToBottom = false);
-      }
-      _isAutoScrolling = true;
-    }
-  }
-
-  void _setupFocusCallback() {
-    try {
-      // FIX: Penting #7 - Null check untuk ChatProvider
-      final chatProvider = context.read<ChatProvider>();
-      chatProvider.setOnMessageComplete(() {
-        Future.delayed(const Duration(milliseconds: 300), () {
-          // FIX: Penting #7 - Better null/state checks
-          if (mounted && _focusNode.canRequestFocus) {
-            _focusNode.requestFocus();
-          }
-        });
-      });
-    } catch (e) {
-      debugPrint('Error setting up focus callback: $e');
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ChatProvider>().setOnMessageComplete(_scrollToBottom);
+    });
   }
 
   void _scrollToBottom() {
-    _scrollController.animateTo(
-      0.0,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
-  @override
-  void dispose() {
-    // FIX: Penting #4 - Remove scroll listener to prevent memory leak
-    _scrollController.removeListener(_scrollListener);
-    _controller.dispose();
-    _scrollController.dispose();
-    _focusNode.dispose();
-    super.dispose();
+  void _sendMessage() {
+    final text = _controller.text.trim();
+    if (text.isNotEmpty) {
+      final settings = context.read<SettingsProvider>();
+      context.read<ChatProvider>().sendMessage(text, settings);
+      _controller.clear();
+      _scrollToBottom();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final chatProvider = context.watch<ChatProvider>();
-    final themeProvider = context.watch<ThemeProvider>();
-
-    // Efek Auto-scroll saat ada pesan baru masuk
-    // Hanya jika user sedang berada di posisi paling bawah
-    if (_isAutoScrolling && _scrollController.hasClients) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.jumpTo(0.0);
-        }
-      });
-    }
+    final settings = context.watch<SettingsProvider>();
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              height: 40,
-              width: 40,
-              child: SvgPicture.asset(
-                'assets/logo.svg',
-                fit: BoxFit.contain,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Jobseeker AI',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  'Career Assistant',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.normal,
-                    color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.7),
-                  ),
-                ),
-              ],
+            const Text('Jobseeker AI', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              '${settings.provider.displayName} - ${settings.activeModel}',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
             ),
           ],
         ),
         actions: [
-          PopupMenuButton<AppThemeMode>(
-            onSelected: (mode) => themeProvider.setThemeMode(mode),
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: AppThemeMode.system,
-                child: Text('System Theme'),
-              ),
-              const PopupMenuItem(
-                value: AppThemeMode.light,
-                child: Text('Light Theme'),
-              ),
-              const PopupMenuItem(
-                value: AppThemeMode.dark,
-                child: Text('Dark Theme'),
-              ),
-            ],
+          // Model Switcher Mini
+          IconButton(
+            icon: const Icon(Icons.swap_horiz, size: 20),
+            tooltip: 'Switch Provider',
+            onPressed: () => _showQuickProviderSwitch(context, settings),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => chatProvider.clearMessages(),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => showDialog(
+              context: context,
+              builder: (context) => const SettingsDialog(),
+            ),
           ),
         ],
       ),
-      body: Stack(
+      body: Column(
         children: [
-          Column(
-            children: [
-              Expanded(
-                child: chatProvider.messages.isEmpty && !_conversationStarted
-                    ? WelcomeScreen(
-                        onStartChat: () {
-                          setState(() {
-                            _conversationStarted = true;
-                          });
-                          Future.delayed(const Duration(milliseconds: 100), () {
-                            _focusNode.requestFocus();
-                          });
-                        },
-                      )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        itemCount: chatProvider.messages.length,
-                        reverse: true,
-                        itemBuilder: (context, index) {
-                          final message = chatProvider.messages[chatProvider.messages.length - 1 - index];
-                          return MessageBubble(message: message);
-                        },
-                      ),
-              ),
-              if (chatProvider.isLoading)
-                const Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: LinearProgressIndicator(),
-                ),
-              if (_conversationStarted || chatProvider.messages.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _controller,
-                          focusNode: _focusNode,
-                          decoration: const InputDecoration(
-                            hintText: 'Type your message...',
-                            border: OutlineInputBorder(),
-                          ),
-                          onSubmitted: (value) {
-                            if (value.isNotEmpty) {
-                              _chatController.sendMessage(value);
-                              _controller.clear();
-                              _isAutoScrolling = true; // Reset auto-scroll saat kirim pesan
-                            }
-                          },
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.send),
-                        onPressed: () {
-                          final message = _controller.text;
-                          if (message.isNotEmpty) {
-                            _chatController.sendMessage(message);
-                            _controller.clear();
-                            _isAutoScrolling = true; // Reset auto-scroll saat kirim pesan
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          // Tombol Scroll to Bottom (Floating)
-          if (_showScrollToBottom)
-            Positioned(
-              bottom: 100,
-              right: 20,
-              child: FloatingActionButton.small(
-                onPressed: _scrollToBottom,
-                child: const Icon(Icons.arrow_downward),
-              ),
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16),
+              itemCount: chatProvider.messages.length,
+              itemBuilder: (context, index) {
+                return ChatBubble(message: chatProvider.messages[index]);
+              },
             ),
+          ),
+          if (chatProvider.isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(),
+            ),
+          _buildInputArea(),
+        ],
+      ),
+    );
+  }
+
+  void _showQuickProviderSwitch(BuildContext context, SettingsProvider settings) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Wrap(
+            children: AiProvider.values.map((p) {
+              return ListTile(
+                leading: Icon(p == settings.provider ? Icons.check_circle : Icons.circle_outlined),
+                title: Text(p.displayName),
+                onTap: () {
+                  settings.setProvider(p);
+                  Navigator.pop(context);
+                },
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildInputArea() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            offset: const Offset(0, -2),
+            blurRadius: 5,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              decoration: InputDecoration(
+                hintText: 'Ask about career, resume, or interview...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
+              onSubmitted: (_) => _sendMessage(),
+            ),
+          ),
+          const SizedBox(width: 8),
+          CircleAvatar(
+            backgroundColor: Theme.of(context).primaryColor,
+            child: IconButton(
+              icon: const Icon(Icons.send, color: Colors.white),
+              onPressed: _sendMessage,
+            ),
+          ),
         ],
       ),
     );

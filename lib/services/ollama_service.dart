@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import '../config/ollama_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class OllamaService {
   static final OllamaService _instance = OllamaService._internal();
@@ -14,7 +14,6 @@ class OllamaService {
   // Gunakan dynamic untuk menghindari error type Process di Web
   dynamic _process;
   bool _initialized = false;
-  String? _serverHost;
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -27,26 +26,26 @@ class OllamaService {
     }
 
     try {
-      debugPrint('Initializing Ollama service...');
+      final prefs = await SharedPreferences.getInstance();
+      final host = prefs.getString('ollama_host') ?? 'localhost';
+      final model = prefs.getString('ollama_model') ?? 'qwen2.5-coder:3b';
+      
+      debugPrint('Initializing Ollama service with host: $host');
 
-      // Auto-detect server host
-      _serverHost = await OllamaConfig.getOllamaHost();
-      debugPrint('OllamaService: Detected server host: $_serverHost');
-
-      // Check if ollama is already running on detected host
-      final checkResponse = await _checkOllamaStatus();
-      if (checkResponse) {
-        debugPrint('Ollama is already running on $_serverHost');
+      // Check if ollama is already running
+      final isRunning = await _checkOllamaStatus(host);
+      if (isRunning) {
+        debugPrint('Ollama is already running on $host');
         _initialized = true;
         return;
       }
 
       // Jika localhost, coba start local server
-      if (_serverHost == OllamaConfig.defaultLocalhost) {
+      if (host == 'localhost' || host == '127.0.0.1') {
         debugPrint('Starting local Ollama server...');
-        await _startLocalServer();
+        await _startLocalServer(model);
       } else {
-        debugPrint('Using remote Ollama server at $_serverHost - no local startup needed');
+        debugPrint('Using remote Ollama server at $host - no local startup needed');
         _initialized = true;
       }
 
@@ -56,7 +55,7 @@ class OllamaService {
     }
   }
 
-  Future<void> _startLocalServer() async {
+  Future<void> _startLocalServer(String model) async {
     try {
       // Start ollama if not running
       debugPrint('Starting Ollama serve...');
@@ -66,8 +65,8 @@ class OllamaService {
       await Future.delayed(const Duration(seconds: 3));
 
       // Now run the model
-      debugPrint('Running qwen2.5-coder:3b model...');
-      await Process.run('ollama', ['run', 'qwen2.5-coder:3b']).timeout(
+      debugPrint('Running $model model...');
+      await Process.run('ollama', ['run', model]).timeout(
         const Duration(minutes: 2),
         onTimeout: () {
           debugPrint('Model loading timed out, but it should be in background');
@@ -79,31 +78,20 @@ class OllamaService {
       debugPrint('Ollama local initialization complete');
     } catch (e) {
       debugPrint('Error starting local Ollama server: $e');
-      throw e;
     }
   }
 
-  Future<bool> _checkOllamaStatus() async {
+  Future<bool> _checkOllamaStatus(String host) async {
     if (kIsWeb) return true;
-    if (_serverHost == null) return false;
 
     try {
-      final tagsUrl = await OllamaConfig.getOllamaTagsUrl();
-      final result = await Process.run('curl', ['-s', '--max-time', '5', tagsUrl])
-          .timeout(const Duration(seconds: 5));
-      return result.exitCode == 0;
+      // Menggunakan Socket.connect lebih reliable daripada curl untuk cek port
+      final socket = await Socket.connect(host, 11434, timeout: const Duration(seconds: 2));
+      socket.destroy();
+      return true;
     } catch (e) {
       return false;
     }
-  }
-
-  /// Get current server status info
-  Future<String> getServerInfo() async {
-    final host = await OllamaConfig.getOllamaHost();
-    final isRemote = OllamaConfig.isUsingRemoteServer ?? false;
-    final isAvailable = await _checkOllamaStatus();
-
-    return 'Server: $host (${isRemote ? "REMOTE" : "LOCAL"}), Available: $isAvailable';
   }
 
   Future<void> dispose() async {
