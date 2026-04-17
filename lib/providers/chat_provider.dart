@@ -20,6 +20,7 @@ Guidelines:
 - Be encouraging and supportive
 - Give specific examples when possible
 - Ask clarifying questions if needed
+- ALWAYS respond using the same language as the user's input. If the user asks in Indonesian, answer in Indonesian. If the user asks in English, answer in English.
 
 Remember: You are Jobseeker AI, your role is to be a career companion for job seekers.''';
 
@@ -42,7 +43,7 @@ Remember: You are Jobseeker AI, your role is to be a career companion for job se
     _isLoading = true;
     notifyListeners();
 
-    // Buat placeholder pesan AI yang kosong
+    // Buat placeholder pesan AI untuk streaming
     final aiMsg = Message(
       text: '',
       isUser: false,
@@ -54,16 +55,15 @@ Remember: You are Jobseeker AI, your role is to be a career companion for job se
     try {
       final fullPrompt = '$_systemPrompt\n\nUser: $userMessage\n\nJobseeker AI:';
 
-      // Gunakan IP Address komputer yang menjalankan Ollama agar bisa diakses di LAN
+      // Gunakan IP Statis atau deteksi otomatis yang aman
       String ollamaHost = '192.168.0.208'; 
       
+      // Jika di web, kita bisa mencoba mengambil dari host saat ini
+      // Menggunakan pendekatan yang aman tanpa direct dart:html
       if (kIsWeb) {
-        // Jika berjalan di web, Uri.base.host akan mengambil host tempat web dihosting.
-        // Jika kita mengakses web via IP LAN, maka host-nya akan otomatis benar.
-        final webHost = Uri.base.host;
-        if (webHost.isNotEmpty && webHost != 'localhost' && webHost != '127.0.0.1') {
-          ollamaHost = webHost;
-        }
+        ollamaHost = Uri.base.host.isNotEmpty && Uri.base.host != 'localhost' 
+            ? Uri.base.host 
+            : '192.168.0.208';
       }
 
       final client = http.Client();
@@ -76,19 +76,17 @@ Remember: You are Jobseeker AI, your role is to be a career companion for job se
       request.body = jsonEncode({
         'model': 'qwen2.5-coder:3b',
         'prompt': fullPrompt,
-        'stream': true, // Aktifkan streaming
-        'temperature': 0.7,
+        'stream': true,
       });
 
       final response = await client.send(request);
 
       if (response.statusCode == 200) {
-        _isLoading = false; // Matikan loading saat stream mulai masuk
+        _isLoading = false;
         notifyListeners();
 
         StringBuffer accumulatedText = StringBuffer();
         
-        // Baca stream data
         await response.stream
             .transform(utf8.decoder)
             .transform(const LineSplitter())
@@ -96,10 +94,9 @@ Remember: You are Jobseeker AI, your role is to be a career companion for job se
           if (line.trim().isNotEmpty) {
             try {
               final data = jsonDecode(line);
-              final String chunk = data['response'] ?? '';
+              final chunk = data['response'] ?? '';
               accumulatedText.write(chunk);
               
-              // Update pesan AI yang sudah ada di list
               _messages[aiMsgIndex] = Message(
                 text: accumulatedText.toString(),
                 isUser: false,
@@ -107,23 +104,16 @@ Remember: You are Jobseeker AI, your role is to be a career companion for job se
               );
               notifyListeners();
             } catch (e) {
-              debugPrint('Error decoding stream line: $e');
+              debugPrint('Error parsing chunk: $e');
             }
           }
         });
       } else {
-        _messages[aiMsgIndex] = Message(
-          text: 'Error: ${response.statusCode}',
-          isUser: false,
-          timestamp: DateTime.now(),
-        );
-        _isLoading = false;
-        notifyListeners();
+        throw Exception('Status code: ${response.statusCode}');
       }
-      client.close();
     } catch (e) {
       _messages[aiMsgIndex] = Message(
-        text: 'Error: $e. Pastikan Ollama OLLAMA_HOST=0.0.0.0 & OLLAMA_ORIGINS="*" sudah diatur.',
+        text: 'Error: $e. Pastikan Ollama aktif dan OLLAMA_HOST=0.0.0.0 sudah diatur.',
         isUser: false,
         timestamp: DateTime.now(),
       );

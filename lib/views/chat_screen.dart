@@ -18,7 +18,6 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
-  final ScrollController _scrollController = ScrollController();
   late ChatController _chatController;
   bool _conversationStarted = false;
 
@@ -30,8 +29,10 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _setupFocusCallback() {
+    // Set callback to focus input after message complete
     final chatProvider = context.read<ChatProvider>();
     chatProvider.setOnMessageComplete(() {
+      // Use Future.delayed to ensure the UI has updated
       Future.delayed(const Duration(milliseconds: 300), () {
         if (mounted && _focusNode.canRequestFocus) {
           _focusNode.requestFocus();
@@ -44,7 +45,6 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _controller.dispose();
     _focusNode.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
@@ -78,7 +78,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.normal,
-                    color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.7),
+                    color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.7),
                   ),
                 ),
               ],
@@ -86,10 +86,6 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () => chatProvider.clearMessages(),
-          ),
           PopupMenuButton<AppThemeMode>(
             onSelected: (mode) => themeProvider.setThemeMode(mode),
             itemBuilder: (context) => [
@@ -124,87 +120,53 @@ class _ChatScreenState extends State<ChatScreen> {
                     },
                   )
                 : ListView.builder(
-                    controller: _scrollController,
                     itemCount: chatProvider.messages.length,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    reverse: true,
                     itemBuilder: (context, index) {
-                      final message = chatProvider.messages[index];
+                      final message = chatProvider.messages[chatProvider.messages.length - 1 - index];
                       return MessageBubble(message: message);
                     },
                   ),
           ),
           if (chatProvider.isLoading)
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8.0),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
+              padding: EdgeInsets.all(8.0),
+              child: CircularProgressIndicator(),
             ),
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    enabled: !chatProvider.isLoading,
-                    decoration: InputDecoration(
-                      hintText: chatProvider.isLoading ? 'Thinking...' : 'Type your career question...',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
+          if (_conversationStarted || chatProvider.messages.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      decoration: const InputDecoration(
+                        hintText: 'Type your message...',
+                        border: OutlineInputBorder(),
                       ),
-                      filled: true,
+                      onSubmitted: (value) {
+                        if (value.isNotEmpty) {
+                          _chatController.sendMessage(value);
+                          _controller.clear();
+                        }
+                      },
                     ),
-                    onSubmitted: (value) {
-                      if (value.isNotEmpty && !chatProvider.isLoading) {
-                        _chatController.sendMessage(value);
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.send),
+                    onPressed: () {
+                      final message = _controller.text;
+                      if (message.isNotEmpty) {
+                        _chatController.sendMessage(message);
                         _controller.clear();
-                        // Auto scroll to bottom
-                        Future.delayed(const Duration(milliseconds: 100), () {
-                          _scrollController.animateTo(
-                            _scrollController.position.maxScrollExtent,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeOut,
-                          );
-                        });
                       }
                     },
                   ),
-                ),
-                const SizedBox(width: 8),
-                CircleAvatar(
-                  backgroundColor: chatProvider.isLoading 
-                      ? Colors.grey 
-                      : Theme.of(context).primaryColor,
-                  child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white),
-                    onPressed: chatProvider.isLoading 
-                      ? null 
-                      : () {
-                          final message = _controller.text;
-                          if (message.isNotEmpty) {
-                            _chatController.sendMessage(message);
-                            _controller.clear();
-                            Future.delayed(const Duration(milliseconds: 100), () {
-                              _scrollController.animateTo(
-                                _scrollController.position.maxScrollExtent,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOut,
-                              );
-                            });
-                          }
-                        },
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );

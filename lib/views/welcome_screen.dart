@@ -21,6 +21,7 @@ class WelcomeScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Large Logo with glow effect
               Container(
                 width: 120,
                 height: 120,
@@ -41,6 +42,7 @@ class WelcomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 40),
 
+              // Welcome Title
               Text(
                 'Welcome to Jobseeker AI',
                 textAlign: TextAlign.center,
@@ -52,6 +54,7 @@ class WelcomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
 
+              // Subtitle
               Text(
                 'Your Career Companion',
                 textAlign: TextAlign.center,
@@ -63,6 +66,7 @@ class WelcomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 32),
 
+              // Decorative divider
               Container(
                 width: 60,
                 height: 3,
@@ -73,6 +77,7 @@ class WelcomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 32),
 
+              // Description
               Text(
                 'Get expert advice on career development, job interviews, resume optimization, and professional growth.',
                 textAlign: TextAlign.center,
@@ -84,6 +89,7 @@ class WelcomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 40),
 
+              // Quick Tips Section
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -115,6 +121,7 @@ class WelcomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 40),
 
+              // Start Chat Button
               Container(
                 width: double.infinity,
                 height: 56,
@@ -159,6 +166,7 @@ class WelcomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
 
+              // Keyboard shortcut hint
               Text(
                 'Press Tab or Ctrl+/ to focus input field',
                 textAlign: TextAlign.center,

@@ -100,4 +100,3 @@ Pastikan `flutter pub get` sudah dijalankan setelah update ini.
    - Tunggu response selesai
    - Input field harus langsung focused
    - Bisa langsung ketik tanpa klik
-
