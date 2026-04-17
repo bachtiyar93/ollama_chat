@@ -87,8 +87,8 @@ Guidelines:
       // Gunakan prompt yang sudah menyertakan riwayat percakapan
       final fullPrompt = _buildContextPrompt(userMessage);
 
-      // FIX: Kritis #1 - Gunakan config untuk host yang fleksibel
-      final ollamaUrl = OllamaConfig.getOllamaUrl();
+      // FIX: Kritis #1 - Gunakan config untuk host yang fleksibel dengan auto-detection
+      final ollamaUrl = await OllamaConfig.getOllamaUrl();
 
       final request = http.Request(
         'POST',

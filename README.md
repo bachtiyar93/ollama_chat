@@ -2,22 +2,25 @@
 
 A Flutter application that serves as an AI-powered career assistant chatbot, integrating with Ollama to provide interactive consultations for job seekers using the Qwen2.5-coder:3b model.
 
-## Features
+## ✨ Features
 
-- Interactive chat with AI for career advice
-- Real-time conversations with Qwen2.5-coder model via Ollama
-- Auto-initialization of Ollama on desktop platforms
-- Code block support with syntax highlighting
-- Copy functionality for messages and code snippets
-- Theme management (system, light, dark modes)
-- Auto-focus input for smooth user experience
+- **AI Career Assistant**: Interactive chat with Jobseeker AI powered by Qwen2.5-coder model
+- **Auto-Server Detection**: Automatically detects local Ollama server or falls back to remote server (192.168.0.208)
+- **Multi-Platform Support**: Works on macOS, Windows, Linux, Web, and Android
+- **Smart Fallback**: Android users automatically connect to remote server without local Ollama installation
+- **Markdown Rendering**: Rich text support with code syntax highlighting
+- **Theme Support**: System, light, and dark theme options
+- **Input Validation**: Prevents abuse with message length limits and spam detection
+- **Error Handling**: Comprehensive error messages with actionable solutions
+- **Resource Management**: Proper cleanup to prevent memory leaks
+- **Request Timeout**: 5-minute timeout to prevent hanging requests
 
 ## How to Run the Project
 
 ### Prerequisites
 - Flutter SDK installed ([Installation Guide](https://docs.flutter.dev/get-started/install))
 - Ollama installed and available in PATH ([Download Ollama](https://ollama.ai/))
-- Supported platforms: macOS, Windows, Linux (full support with auto-Ollama), Web (limited, manual setup required)
+- Supported platforms: macOS, Windows, Linux (full support with auto-Ollama), Web (limited, manual setup required), Android (with remote server fallback)
 
 ### Installation Steps
 1. Clone or open the project:
@@ -48,6 +51,14 @@ A Flutter application that serves as an AI-powered career assistant chatbot, int
      ```
      flutter run -d chrome
      ```
+
+5. For Android:
+   - Ensure your device is connected or emulator is running.
+   - Run:
+     ```
+     flutter run -d android
+     ```
+   - The app will automatically detect the Ollama server.
 
 ## Usage
 1. Launch the app - Ollama initializes automatically on desktop.

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import '../config/ollama_config.dart';
 
 class OllamaService {
   static final OllamaService _instance = OllamaService._internal();
@@ -13,6 +14,7 @@ class OllamaService {
   // Gunakan dynamic untuk menghindari error type Process di Web
   dynamic _process;
   bool _initialized = false;
+  String? _serverHost;
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -27,16 +29,37 @@ class OllamaService {
     try {
       debugPrint('Initializing Ollama service...');
 
-      // Check if ollama is already running
+      // Auto-detect server host
+      _serverHost = await OllamaConfig.getOllamaHost();
+      debugPrint('OllamaService: Detected server host: $_serverHost');
+
+      // Check if ollama is already running on detected host
       final checkResponse = await _checkOllamaStatus();
       if (checkResponse) {
-        debugPrint('Ollama is already running');
+        debugPrint('Ollama is already running on $_serverHost');
         _initialized = true;
         return;
       }
 
+      // Jika localhost, coba start local server
+      if (_serverHost == OllamaConfig.defaultLocalhost) {
+        debugPrint('Starting local Ollama server...');
+        await _startLocalServer();
+      } else {
+        debugPrint('Using remote Ollama server at $_serverHost - no local startup needed');
+        _initialized = true;
+      }
+
+    } catch (e) {
+      debugPrint('Error initializing Ollama: $e');
+      _initialized = true;
+    }
+  }
+
+  Future<void> _startLocalServer() async {
+    try {
       // Start ollama if not running
-      debugPrint('Starting Ollama...');
+      debugPrint('Starting Ollama serve...');
       _process = await Process.start('ollama', ['serve']);
 
       // Wait a bit for ollama to start
@@ -53,22 +76,34 @@ class OllamaService {
       );
 
       _initialized = true;
-      debugPrint('Ollama initialization complete');
+      debugPrint('Ollama local initialization complete');
     } catch (e) {
-      debugPrint('Error initializing Ollama: $e');
-      _initialized = true;
+      debugPrint('Error starting local Ollama server: $e');
+      throw e;
     }
   }
 
   Future<bool> _checkOllamaStatus() async {
     if (kIsWeb) return true;
+    if (_serverHost == null) return false;
+
     try {
-      final result = await Process.run('curl', ['-s', 'http://localhost:11434/api/tags'])
+      final tagsUrl = await OllamaConfig.getOllamaTagsUrl();
+      final result = await Process.run('curl', ['-s', '--max-time', '5', tagsUrl])
           .timeout(const Duration(seconds: 5));
       return result.exitCode == 0;
     } catch (e) {
       return false;
     }
+  }
+
+  /// Get current server status info
+  Future<String> getServerInfo() async {
+    final host = await OllamaConfig.getOllamaHost();
+    final isRemote = OllamaConfig.isUsingRemoteServer ?? false;
+    final isAvailable = await _checkOllamaStatus();
+
+    return 'Server: $host (${isRemote ? "REMOTE" : "LOCAL"}), Available: $isAvailable';
   }
 
   Future<void> dispose() async {
