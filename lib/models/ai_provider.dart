@@ -1,17 +1,24 @@
-enum AiProvider {
-  ollama,
-  gemini,
-  openai,
-  anthropic,
-}
+import 'package:hive/hive.dart';
 
-extension AiProviderExtension on AiProvider {
+part 'ai_provider.g.dart';
+
+@HiveType(typeId: 2)
+enum AiProvider {
+  @HiveField(0)
+  ollama,
+  @HiveField(1)
+  gemini,
+  @HiveField(2)
+  openai,
+  @HiveField(3)
+  anthropic;
+
   String get displayName {
     switch (this) {
-      case AiProvider.ollama: return 'Ollama (Local)';
+      case AiProvider.ollama: return 'Ollama';
       case AiProvider.gemini: return 'Google Gemini';
-      case AiProvider.openai: return 'OpenAI (ChatGPT)';
-      case AiProvider.anthropic: return 'Anthropic (Claude)';
+      case AiProvider.openai: return 'OpenAI';
+      case AiProvider.anthropic: return 'Anthropic Claude';
     }
   }
 }

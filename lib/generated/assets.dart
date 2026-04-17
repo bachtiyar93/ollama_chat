@@ -109,6 +109,8 @@ class SvgGenImage {
     bool excludeFromSemantics = false,
     SvgTheme? theme,
     Clip clipBehavior = Clip.hardEdge,
+    Color? color,
+    BlendMode colorBlendMode = BlendMode.srcIn,
   }) {
     return SvgPicture.asset(
       _assetName,
@@ -125,6 +127,7 @@ class SvgGenImage {
       semanticsLabel: semanticsLabel,
       excludeFromSemantics: excludeFromSemantics,
       theme: theme,
+      colorFilter: color != null ? ColorFilter.mode(color, colorBlendMode) : null,
       clipBehavior: clipBehavior,
     );
   }

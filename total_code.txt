@@ -1,4 +1,192 @@
-FILE: lib/generated/assets.dart
+// ignore_for_file: directives_ordering
+// ignore_for_file: no_leading_underscores_for_library_prefixes
+import 'package:build_runner_core/build_runner_core.dart' as _i1;
+import 'package:hive_generator/hive_generator.dart' as _i2;
+import 'package:source_gen/builder.dart' as _i3;
+import 'package:build_resolvers/builder.dart' as _i4;
+import 'dart:isolate' as _i5;
+import 'package:build_runner/build_runner.dart' as _i6;
+import 'dart:io' as _i7;
+
+final _builders = <_i1.BuilderApplication>[
+  _i1.apply(
+    r'hive_generator:hive_generator',
+    [_i2.getBuilder],
+    _i1.toDependentsOf(r'hive_generator'),
+    hideOutput: true,
+    appliesBuilders: const [r'source_gen:combining_builder'],
+  ),
+  _i1.apply(
+    r'source_gen:combining_builder',
+    [_i3.combiningBuilder],
+    _i1.toNoneByDefault(),
+    hideOutput: false,
+    appliesBuilders: const [r'source_gen:part_cleanup'],
+  ),
+  _i1.apply(
+    r'build_resolvers:transitive_digests',
+    [_i4.transitiveDigestsBuilder],
+    _i1.toAllPackages(),
+    isOptional: true,
+    hideOutput: true,
+    appliesBuilders: const [r'build_resolvers:transitive_digest_cleanup'],
+  ),
+  _i1.applyPostProcess(
+    r'build_resolvers:transitive_digest_cleanup',
+    _i4.transitiveDigestCleanup,
+  ),
+  _i1.applyPostProcess(
+    r'source_gen:part_cleanup',
+    _i3.partCleanup,
+  ),
+];
+void main(
+  List<String> args, [
+  _i5.SendPort? sendPort,
+]) async {
+  var result = await _i6.run(
+    args,
+    _builders,
+  );
+  sendPort?.send(result);
+  _i7.exitCode = result;
+}
+// Flutter web plugin registrant file.
+//
+// Generated file. Do not edit.
+//
+
+// ignore_for_file: type=lint
+
+void registerPlugins() {}
+import 'package:flutter/foundation.dart';
+import 'dart:io';
+
+class OllamaConfig {
+  /// Default hosts untuk berbagai environment
+  static const String defaultLocalhost = 'localhost';
+  static const String remoteServerHost = '192.168.0.208'; // Server PC Anda
+  static const int defaultPort = 11434;
+  static const String modelName = 'qwen2.5-coder:3b';
+  static const int requestTimeoutSeconds = 300; // 5 menit
+  static const int maxMessageLength = 10000; // 10KB
+  static const int contextWindowSize = 4096;
+  static const double temperature = 0.7;
+
+  /// Cache untuk host yang terdeteksi
+  static String? _detectedHost;
+  static bool? _isRemoteServer;
+
+  /// Reset cache (untuk testing atau force re-detection)
+  static void resetCache() {
+    _detectedHost = null;
+    _isRemoteServer = null;
+  }
+
+  /// Check apakah server Ollama tersedia di host tertentu
+  static Future<bool> _isServerAvailable(String host) async {
+    if (kIsWeb) return true; // Web selalu anggap available
+
+    try {
+      final url = 'http://$host:$defaultPort/api/tags';
+      final result = await Process.run('curl', ['-s', '--max-time', '5', url]);
+      return result.exitCode == 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Get the Ollama host address dengan auto-detection
+  /// Prioritas: localhost -> remote server (192.168.0.208)
+  static Future<String> getOllamaHost() async {
+    // Return cached result jika sudah dideteksi
+    if (_detectedHost != null) {
+      return _detectedHost!;
+    }
+
+    if (kIsWeb) {
+      // Web: gunakan current host atau fallback
+      final currentHost = Uri.base.host;
+      if (currentHost.isNotEmpty && currentHost != 'localhost') {
+        _detectedHost = currentHost;
+        _isRemoteServer = true;
+        return currentHost;
+      }
+      _detectedHost = remoteServerHost;
+      _isRemoteServer = true;
+      return remoteServerHost;
+    }
+
+    // Desktop/Mobile: Coba localhost dulu
+    if (await _isServerAvailable(defaultLocalhost)) {
+      _detectedHost = defaultLocalhost;
+      _isRemoteServer = false;
+      return defaultLocalhost;
+    }
+
+    // Jika localhost tidak available, coba remote server
+    if (await _isServerAvailable(remoteServerHost)) {
+      _detectedHost = remoteServerHost;
+      _isRemoteServer = true;
+      return remoteServerHost;
+    }
+
+    // Fallback ke remote server jika tidak ada yang available
+    // (untuk kasus dimana server belum start tapi kita tetap coba)
+    _detectedHost = remoteServerHost;
+    _isRemoteServer = true;
+    return remoteServerHost;
+  }
+
+  /// Get full Ollama URL dengan auto-detection
+  static Future<String> getOllamaUrl() async {
+    final host = await getOllamaHost();
+    return 'http://$host:$defaultPort/api/generate';
+  }
+
+  /// Get Ollama tags check URL dengan auto-detection
+  static Future<String> getOllamaTagsUrl() async {
+    final host = await getOllamaHost();
+    return 'http://$host:$defaultPort/api/tags';
+  }
+
+  /// Check apakah menggunakan remote server
+  static bool? get isUsingRemoteServer => _isRemoteServer;
+
+  /// Get status server untuk debugging
+  static Future<String> getServerStatus() async {
+    final host = await getOllamaHost();
+    final isAvailable = await _isServerAvailable(host);
+
+    return 'Host: $host, Available: $isAvailable, Remote: ${_isRemoteServer ?? false}';
+  }
+}
+import 'package:flutter/material.dart';
+import '../providers/chat_provider.dart';
+import '../providers/settings_provider.dart';
+
+class ChatController {
+  final ChatProvider chatProvider;
+
+  ChatController(this.chatProvider);
+
+  void sendMessage(String message, SettingsProvider settings) {
+    final trimmed = message.trim();
+
+    if (trimmed.isEmpty) {
+      debugPrint('Message is empty');
+      return;
+    }
+
+    // You might want to move maxMessageLength to settings or keep it as a constant
+    if (trimmed.length > 10000) {
+      debugPrint('Message too long');
+      return;
+    }
+
+    chatProvider.sendMessage(trimmed, settings);
+  }
+}
 ///This file is automatically generated. DO NOT EDIT, all your changes would be lost.
 // ignore_for_file: dangling_library_doc_comments, implementation_imports
 import 'package:flutter/widgets.dart';
@@ -110,6 +298,8 @@ class SvgGenImage {
     bool excludeFromSemantics = false,
     SvgTheme? theme,
     Clip clipBehavior = Clip.hardEdge,
+    Color? color,
+    BlendMode colorBlendMode = BlendMode.srcIn,
   }) {
     return SvgPicture.asset(
       _assetName,
@@ -126,6 +316,7 @@ class SvgGenImage {
       semanticsLabel: semanticsLabel,
       excludeFromSemantics: excludeFromSemantics,
       theme: theme,
+      colorFilter: color != null ? ColorFilter.mode(color, colorBlendMode) : null,
       clipBehavior: clipBehavior,
     );
   }
@@ -144,175 +335,666 @@ class SvgGenImage {
 
   String get keyName => _assetName;
 }
--e \n---\n
-FILE: lib/providers/chat_provider.dart
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart' show kIsWeb;
-import '../models/message.dart';
+import 'package:provider/provider.dart';
+import 'services/hive_service.dart';
+import 'services/ollama_service.dart';
+import 'services/gemini_service.dart';
+import 'services/openai_service.dart';
+import 'providers/settings_provider.dart';
+import 'providers/chat_provider.dart';
+import 'providers/theme_provider.dart';
+import 'views/welcome_screen.dart';
+import 'views/chat_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  final hiveService = HiveService();
+  await hiveService.init();
+
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        Provider.value(value: hiveService),
+        Provider(create: (_) => OllamaService()),
+        Provider(create: (_) => GeminiService()),
+        Provider(create: (_) => OpenAIService()),
+        ChangeNotifierProxyProvider<HiveService, SettingsProvider>(
+          create: (context) => SettingsProvider(context.read<HiveService>()),
+          update: (context, hive, previous) => previous!..loadSettings(),
+        ),
+        ChangeNotifierProxyProvider<SettingsProvider, ThemeProvider>(
+          create: (context) => ThemeProvider(),
+          update: (context, settings, theme) => theme!..updateFromSettings(settings.themeMode),
+        ),
+        ChangeNotifierProxyProvider4<HiveService, OllamaService, GeminiService, OpenAIService, ChatProvider>(
+          create: (context) => ChatProvider(
+            context.read<HiveService>(),
+            context.read<OllamaService>(),
+            context.read<GeminiService>(),
+            context.read<OpenAIService>(),
+          ),
+          update: (context, hive, ollama, gemini, openai, previous) => previous!..loadHistory(),
+        ),
+      ],
+      child: const JobseekerApp(),
+    ),
+  );
+}
+
+class JobseekerApp extends StatelessWidget {
+  const JobseekerApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+
+    return MaterialApp(
+      title: 'Jobseeker AI',
+      debugShowCheckedModeBanner: false,
+      theme: themeProvider.lightTheme,
+      darkTheme: themeProvider.darkTheme,
+      themeMode: themeProvider.flutterThemeMode,
+      home: const MainNavigation(),
+    );
+  }
+}
+
+class MainNavigation extends StatefulWidget {
+  const MainNavigation({super.key});
+
+  @override
+  State<MainNavigation> createState() => _MainNavigationState();
+}
+
+class _MainNavigationState extends State<MainNavigation> {
+  bool _showChat = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_showChat) {
+      return const ChatScreen();
+    }
+
+    return Scaffold(
+      body: WelcomeScreen(
+        onStartChat: () => setState(() => _showChat = true),
+        onOpenSettings: () {
+          // Settings can be opened from dialogs
+        },
+      ),
+    );
+  }
+}
+import 'package:hive/hive.dart';
+
+part 'ai_provider.g.dart';
+
+@HiveType(typeId: 2)
+enum AiProvider {
+  @HiveField(0)
+  ollama,
+  @HiveField(1)
+  gemini,
+  @HiveField(2)
+  openai,
+  @HiveField(3)
+  anthropic;
+
+  String get displayName {
+    switch (this) {
+      case AiProvider.ollama: return 'Ollama';
+      case AiProvider.gemini: return 'Google Gemini';
+      case AiProvider.openai: return 'OpenAI';
+      case AiProvider.anthropic: return 'Anthropic Claude';
+    }
+  }
+}
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'ai_provider.dart';
+
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
+
+class AiProviderAdapter extends TypeAdapter<AiProvider> {
+  @override
+  final int typeId = 2;
+
+  @override
+  AiProvider read(BinaryReader reader) {
+    switch (reader.readByte()) {
+      case 0:
+        return AiProvider.ollama;
+      case 1:
+        return AiProvider.gemini;
+      case 2:
+        return AiProvider.openai;
+      case 3:
+        return AiProvider.anthropic;
+      default:
+        return AiProvider.ollama;
+    }
+  }
+
+  @override
+  void write(BinaryWriter writer, AiProvider obj) {
+    switch (obj) {
+      case AiProvider.ollama:
+        writer.writeByte(0);
+        break;
+      case AiProvider.gemini:
+        writer.writeByte(1);
+        break;
+      case AiProvider.openai:
+        writer.writeByte(2);
+        break;
+      case AiProvider.anthropic:
+        writer.writeByte(3);
+        break;
+    }
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AiProviderAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}
+import 'package:hive/hive.dart';
+import 'ai_provider.dart';
+import 'theme_mode.dart';
+
+part 'app_config.g.dart';
+
+@HiveType(typeId: 0)
+class AppSettings extends HiveObject {
+  @HiveField(0)
+  AiProvider provider = AiProvider.ollama;
+
+  @HiveField(1)
+  AppThemeMode themeMode = AppThemeMode.system;
+
+  @HiveField(2)
+  String ollamaHost = 'localhost';
+
+  @HiveField(3)
+  int ollamaPort = 11434;
+
+  @HiveField(4)
+  String ollamaModel = 'qwen2.5-coder:3b';
+
+  @HiveField(5)
+  String geminiKey = '';
+
+  @HiveField(6)
+  String geminiModel = 'gemini-1.5-flash';
+
+  @HiveField(7)
+  String openAIKey = '';
+
+  @HiveField(8)
+  String openAIModel = 'gpt-4o-mini';
+
+  @HiveField(9)
+  String anthropicKey = '';
+
+  @HiveField(10)
+  String anthropicModel = 'claude-3-5-sonnet-20240620';
+}
+
+@HiveType(typeId: 1)
+class ChatMessage extends HiveObject {
+  @HiveField(0)
+  late String text;
+
+  @HiveField(1)
+  late bool isUser;
+
+  @HiveField(2)
+  late DateTime timestamp;
+
+  ChatMessage();
+
+  ChatMessage.create({
+    required this.text,
+    required this.isUser,
+    required this.timestamp,
+  });
+}
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'app_config.dart';
+
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
+
+class AppSettingsAdapter extends TypeAdapter<AppSettings> {
+  @override
+  final int typeId = 0;
+
+  @override
+  AppSettings read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
+    return AppSettings()
+      ..provider = fields[0] as AiProvider
+      ..themeMode = fields[1] as AppThemeMode
+      ..ollamaHost = fields[2] as String
+      ..ollamaPort = fields[3] as int
+      ..ollamaModel = fields[4] as String
+      ..geminiKey = fields[5] as String
+      ..geminiModel = fields[6] as String
+      ..openAIKey = fields[7] as String
+      ..openAIModel = fields[8] as String
+      ..anthropicKey = fields[9] as String
+      ..anthropicModel = fields[10] as String;
+  }
+
+  @override
+  void write(BinaryWriter writer, AppSettings obj) {
+    writer
+      ..writeByte(11)
+      ..writeByte(0)
+      ..write(obj.provider)
+      ..writeByte(1)
+      ..write(obj.themeMode)
+      ..writeByte(2)
+      ..write(obj.ollamaHost)
+      ..writeByte(3)
+      ..write(obj.ollamaPort)
+      ..writeByte(4)
+      ..write(obj.ollamaModel)
+      ..writeByte(5)
+      ..write(obj.geminiKey)
+      ..writeByte(6)
+      ..write(obj.geminiModel)
+      ..writeByte(7)
+      ..write(obj.openAIKey)
+      ..writeByte(8)
+      ..write(obj.openAIModel)
+      ..writeByte(9)
+      ..write(obj.anthropicKey)
+      ..writeByte(10)
+      ..write(obj.anthropicModel);
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppSettingsAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}
+
+class ChatMessageAdapter extends TypeAdapter<ChatMessage> {
+  @override
+  final int typeId = 1;
+
+  @override
+  ChatMessage read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
+    return ChatMessage()
+      ..text = fields[0] as String
+      ..isUser = fields[1] as bool
+      ..timestamp = fields[2] as DateTime;
+  }
+
+  @override
+  void write(BinaryWriter writer, ChatMessage obj) {
+    writer
+      ..writeByte(3)
+      ..writeByte(0)
+      ..write(obj.text)
+      ..writeByte(1)
+      ..write(obj.isUser)
+      ..writeByte(2)
+      ..write(obj.timestamp);
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ChatMessageAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}
+import 'package:hive/hive.dart';
+
+part 'theme_mode.g.dart';
+
+@HiveType(typeId: 3)
+enum AppThemeMode {
+  @HiveField(0)
+  system,
+  @HiveField(1)
+  light,
+  @HiveField(2)
+  dark,
+}
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'theme_mode.dart';
+
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
+
+class AppThemeModeAdapter extends TypeAdapter<AppThemeMode> {
+  @override
+  final int typeId = 3;
+
+  @override
+  AppThemeMode read(BinaryReader reader) {
+    switch (reader.readByte()) {
+      case 0:
+        return AppThemeMode.system;
+      case 1:
+        return AppThemeMode.light;
+      case 2:
+        return AppThemeMode.dark;
+      default:
+        return AppThemeMode.system;
+    }
+  }
+
+  @override
+  void write(BinaryWriter writer, AppThemeMode obj) {
+    switch (obj) {
+      case AppThemeMode.system:
+        writer.writeByte(0);
+        break;
+      case AppThemeMode.light:
+        writer.writeByte(1);
+        break;
+      case AppThemeMode.dark:
+        writer.writeByte(2);
+        break;
+    }
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AppThemeModeAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}
+import 'package:flutter/material.dart';
+import '../models/app_config.dart';
+import '../services/hive_service.dart';
+import '../services/ollama_service.dart';
+import '../services/gemini_service.dart';
+import '../services/openai_service.dart';
+import '../models/ai_provider.dart';
+import 'settings_provider.dart';
 
 class ChatProvider with ChangeNotifier {
-  final List<Message> _messages = [];
+  final HiveService _hiveService;
+  final OllamaService _ollamaService;
+  final GeminiService _geminiService;
+  final OpenAIService _openAIService;
+
+  List<ChatMessage> _messages = [];
   bool _isLoading = false;
-  VoidCallback? _onMessageComplete;
 
-  static const String _systemPrompt = '''You are Jobseeker AI, a professional career assistant created to help job seekers with career guidance, interview preparation, resume optimization, salary negotiation, and professional development.
-
-Your name is Jobseeker AI. You are a specialized career assistant.
-
-Guidelines:
-- ALWAYS respond using the same language as the user's input.
-- Stay in character as a career assistant.
-- Use the provided conversation history to maintain context.''';
-
-  List<Message> get messages => _messages;
+  List<ChatMessage> get messages => _messages;
   bool get isLoading => _isLoading;
 
-  void setOnMessageComplete(VoidCallback callback) {
-    _onMessageComplete = callback;
+  ChatProvider(
+    this._hiveService,
+    this._ollamaService,
+    this._geminiService,
+    this._openAIService,
+  );
+
+  Future<void> loadHistory() async {
+    _messages = await _hiveService.getChatHistory();
+    notifyListeners();
   }
 
-  // Fungsi untuk membangun prompt dengan konteks yang "cerdas" (Ringan tapi tetap ingat tujuan)
-  String _buildContextPrompt(String currentMessage) {
-    StringBuffer prompt = StringBuffer();
-    prompt.writeln("System: $_systemPrompt");
-    prompt.writeln("\nConversation History:");
-    
-    // STRATEGI: Ambil 2 pesan awal (tujuan) + 8 pesan terakhir (aliran diskusi)
-    List<Message> contextMessages = [];
-    
-    if (_messages.length > 10) {
-      // Ambil 2 pertama (Penting untuk tahu topik utama diskusi)
-      contextMessages.addAll(_messages.take(2));
-      prompt.writeln("... (beberapa pesan sebelumnya disederhanakan) ...");
-      // Ambil 8 terakhir (Penting untuk alur diskusi saat ini)
-      // -1 karena pesan terakhir saat ini adalah placeholder AI yang sedang diproses
-      contextMessages.addAll(_messages.sublist(_messages.length - 9, _messages.length - 1));
-    } else {
-      contextMessages.addAll(_messages.take(_messages.length - 1));
-    }
+  Future<void> sendMessage(String text, SettingsProvider settings) async {
+    if (text.trim().isEmpty) return;
 
-    for (final msg in contextMessages) {
-      prompt.writeln("${msg.isUser ? 'User' : 'Jobseeker AI'}: ${msg.text}");
-    }
-
-    prompt.writeln("\nCurrent User Question: $currentMessage");
-    prompt.writeln("\nJobseeker AI:");
-    return prompt.toString();
-  }
-
-  Future<void> sendMessage(String userMessage) async {
-    final userMsg = Message(
-      text: userMessage,
+    // 1. Simpan & Tampilkan pesan User
+    final userMsg = ChatMessage.create(
+      text: text,
       isUser: true,
       timestamp: DateTime.now(),
     );
     _messages.add(userMsg);
+    await _hiveService.saveChatMessage(text, true);
     notifyListeners();
 
     _isLoading = true;
     notifyListeners();
 
-    final aiMsg = Message(
-      text: '',
-      isUser: false,
-      timestamp: DateTime.now(),
-    );
-    _messages.add(aiMsg);
-    int aiMsgIndex = _messages.length - 1;
-
     try {
-      // Gunakan prompt yang sudah menyertakan riwayat percakapan
-      final fullPrompt = _buildContextPrompt(userMessage);
-
-      String ollamaHost = '192.168.0.208'; 
-      if (kIsWeb) {
-        ollamaHost = Uri.base.host.isNotEmpty && Uri.base.host != 'localhost' 
-            ? Uri.base.host 
-            : '192.168.0.208';
-      }
-
-      final client = http.Client();
-      final request = http.Request(
-        'POST',
-        Uri.parse('http://$ollamaHost:11434/api/generate'),
-      );
+      String responseText = '';
       
-      request.headers['Content-Type'] = 'application/json';
-      request.body = jsonEncode({
-        'model': 'qwen2.5-coder:3b',
-        'prompt': fullPrompt,
-        'stream': true,
-        'options': {
-          'num_ctx': 4096, // Memperbesar context window
-          'temperature': 0.7,
-        }
-      });
-
-      final response = await client.send(request);
-
-      if (response.statusCode == 200) {
-        _isLoading = false;
-        notifyListeners();
-
-        StringBuffer accumulatedText = StringBuffer();
-        await response.stream
-            .transform(utf8.decoder)
-            .transform(const LineSplitter())
-            .forEach((line) {
-          if (line.trim().isNotEmpty) {
-            try {
-              final data = jsonDecode(line);
-              final chunk = data['response'] ?? '';
-              accumulatedText.write(chunk);
-              
-              _messages[aiMsgIndex] = Message(
-                text: accumulatedText.toString(),
-                isUser: false,
-                timestamp: aiMsg.timestamp,
-              );
-              notifyListeners();
-            } catch (e) {
-              debugPrint('Error parsing chunk: $e');
-            }
-          }
-        });
-      } else {
-        throw Exception('Status code: ${response.statusCode}');
+      // 2. Kirim ke Provider yang sesuai
+      switch (settings.provider) {
+        case AiProvider.ollama:
+          responseText = await _ollamaService.generateResponse(
+            text,
+            settings.ollamaBaseUrl,
+            settings.ollamaModel,
+          );
+          break;
+        case AiProvider.gemini:
+          responseText = await _geminiService.generateResponse(
+            text,
+            settings.geminiKey,
+            settings.geminiModel,
+          );
+          break;
+        case AiProvider.openai:
+          responseText = await _openAIService.generateResponse(
+            text,
+            settings.openAIKey,
+            settings.openAIModel,
+          );
+          break;
+        case AiProvider.anthropic:
+          responseText = "Anthropic support coming soon...";
+          break;
       }
-    } catch (e) {
-      _messages[aiMsgIndex] = Message(
-        text: 'Error: $e. Pastikan Ollama aktif.',
+
+      // 3. Simpan & Tampilkan pesan AI
+      final aiMsg = ChatMessage.create(
+        text: responseText,
         isUser: false,
         timestamp: DateTime.now(),
       );
+      _messages.add(aiMsg);
+      await _hiveService.saveChatMessage(responseText, false);
+      
+    } catch (e) {
+      final errorMsg = ChatMessage.create(
+        text: 'Error: $e',
+        isUser: false,
+        timestamp: DateTime.now(),
+      );
+      _messages.add(errorMsg);
+    } finally {
       _isLoading = false;
       notifyListeners();
     }
-
-    if (_onMessageComplete != null) {
-      _onMessageComplete?.call();
-    }
   }
 
-  void clearMessages() {
+  Future<void> clearChat() async {
+    await _hiveService.clearHistory();
     _messages.clear();
     notifyListeners();
   }
 }
--e \n---\n
-FILE: lib/providers/theme_provider.dart
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../models/ai_provider.dart';
+import '../models/theme_mode.dart';
+import '../models/app_config.dart';
+import '../services/hive_service.dart';
+import 'package:http/http.dart' as http;
+
+class SettingsProvider with ChangeNotifier {
+  final HiveService _hiveService;
+  AppSettings _config = AppSettings();
+  
+  bool _isCheckingConnection = false;
+  bool? _lastConnectionStatus;
+
+  SettingsProvider(this._hiveService);
+
+  AiProvider get provider => _config.provider;
+  AppThemeMode get themeMode => _config.themeMode;
+  
+  String get ollamaHost => _config.ollamaHost;
+  int get ollamaPort => _config.ollamaPort;
+  String get ollamaModel => _config.ollamaModel;
+  
+  String get geminiKey => _config.geminiKey;
+  String get geminiModel => _config.geminiModel;
+  
+  String get openAIKey => _config.openAIKey;
+  String get openAIModel => _config.openAIModel;
+  
+  String get anthropicKey => _config.anthropicKey;
+  String get anthropicModel => _config.anthropicModel;
+
+  bool get isCheckingConnection => _isCheckingConnection;
+  bool? get lastConnectionStatus => _lastConnectionStatus;
+
+  String get activeModel {
+    switch (provider) {
+      case AiProvider.ollama: return ollamaModel;
+      case AiProvider.gemini: return geminiModel;
+      case AiProvider.openai: return openAIModel;
+      case AiProvider.anthropic: return anthropicModel;
+    }
+  }
+
+  String get ollamaBaseUrl => 'http://$ollamaHost:$ollamaPort';
+
+  Future<void> loadSettings() async {
+    _config = await _hiveService.getConfig();
+    notifyListeners();
+  }
+
+  Future<void> setProvider(AiProvider provider) async {
+    _config.provider = provider;
+    _lastConnectionStatus = null;
+    await _hiveService.saveConfig(_config);
+    notifyListeners();
+  }
+
+  Future<void> setThemeMode(AppThemeMode mode) async {
+    _config.themeMode = mode;
+    await _hiveService.saveConfig(_config);
+    notifyListeners();
+  }
+
+  Future<void> updateOllama(String host, int port, String model) async {
+    _config.ollamaHost = host;
+    _config.ollamaPort = port;
+    _config.ollamaModel = model;
+    _lastConnectionStatus = null;
+    await _hiveService.saveConfig(_config);
+    notifyListeners();
+  }
+
+  Future<void> updateGemini(String key, String model) async {
+    _config.geminiKey = key;
+    _config.geminiModel = model;
+    _lastConnectionStatus = null;
+    await _hiveService.saveConfig(_config);
+    notifyListeners();
+  }
+
+  Future<void> updateOpenAI(String key, String model) async {
+    _config.openAIKey = key;
+    _config.openAIModel = model;
+    _lastConnectionStatus = null;
+    await _hiveService.saveConfig(_config);
+    notifyListeners();
+  }
+
+  Future<void> updateAnthropic(String key, String model) async {
+    _config.anthropicKey = key;
+    _config.anthropicModel = model;
+    _lastConnectionStatus = null;
+    await _hiveService.saveConfig(_config);
+    notifyListeners();
+  }
+
+  Future<bool> checkConnection() async {
+    _isCheckingConnection = true;
+    _lastConnectionStatus = null;
+    notifyListeners();
+
+    try {
+      bool success = false;
+      switch (provider) {
+        case AiProvider.ollama:
+          final response = await http.get(Uri.parse('$ollamaBaseUrl/api/tags')).timeout(const Duration(seconds: 5));
+          success = response.statusCode == 200;
+          break;
+        case AiProvider.gemini:
+          final response = await http.get(Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$geminiKey'));
+          success = response.statusCode == 200;
+          break;
+        case AiProvider.openai:
+          final response = await http.get(
+            Uri.parse('https://api.openai.com/v1/models'),
+            headers: {'Authorization': 'Bearer $openAIKey'},
+          );
+          success = response.statusCode == 200;
+          break;
+        case AiProvider.anthropic:
+          success = anthropicKey.isNotEmpty;
+          break;
+      }
+      
+      _lastConnectionStatus = success;
+      _isCheckingConnection = false;
+      notifyListeners();
+      return success;
+    } catch (e) {
+      _lastConnectionStatus = false;
+      _isCheckingConnection = false;
+      notifyListeners();
+      return false;
+    }
+  }
+}
+import 'package:flutter/material.dart';
 import '../models/theme_mode.dart';
 
 class ThemeProvider with ChangeNotifier {
   AppThemeMode _themeMode = AppThemeMode.system;
 
   AppThemeMode get themeMode => _themeMode;
-
-  // Mengonversi AppThemeMode kita ke ThemeMode bawaan Flutter
+  
   ThemeMode get flutterThemeMode {
     switch (_themeMode) {
       case AppThemeMode.light:
@@ -324,7 +1006,6 @@ class ThemeProvider with ChangeNotifier {
     }
   }
 
-  // Gunakan colorSchemeSeed untuk tampilan yang lebih profesional (biru karir)
   ThemeData get lightTheme => ThemeData(
         useMaterial3: true,
         colorSchemeSeed: Colors.blue.shade900,
@@ -338,135 +1019,161 @@ class ThemeProvider with ChangeNotifier {
       );
 
   void setThemeMode(AppThemeMode mode) {
-    _themeMode = mode;
-    _saveThemeMode();
-    notifyListeners();
-  }
-
-  Future<void> loadThemeMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedMode = prefs.getString('themeMode');
-    if (savedMode != null) {
-      _themeMode = AppThemeMode.values.firstWhere(
-        (e) => e.toString() == savedMode,
-        orElse: () => AppThemeMode.system,
-      );
-    }
-    notifyListeners();
-  }
-
-  Future<void> _saveThemeMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('themeMode', _themeMode.toString());
-  }
-}
--e \n---\n
-FILE: lib/models/message.dart
-class Message {
-  final String text;
-  final bool isUser;
-  final DateTime timestamp;
-
-  Message({
-    required this.text,
-    required this.isUser,
-    required this.timestamp,
-  });
-
-  Map<String, dynamic> toJson() {
-    return {
-      'text': text,
-      'isUser': isUser,
-      'timestamp': timestamp.toIso8601String(),
-    };
-  }
-
-  factory Message.fromJson(Map<String, dynamic> json) {
-    return Message(
-      text: json['text'],
-      isUser: json['isUser'],
-      timestamp: DateTime.parse(json['timestamp']),
-    );
-  }
-}-e \n---\n
-FILE: lib/models/theme_mode.dart
-enum AppThemeMode {
-  system,
-  light,
-  dark,
-}-e \n---\n
-FILE: lib/main.dart
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'providers/chat_provider.dart';
-import 'providers/theme_provider.dart';
-import 'views/chat_screen.dart';
-import 'services/ollama_service.dart';
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  final themeProvider = ThemeProvider();
-  await themeProvider.loadThemeMode();
-
-  // Initialize Ollama
-  await OllamaService().initialize();
-
-  runApp(MyApp(themeProvider: themeProvider));
-}
-
-class MyApp extends StatelessWidget {
-  final ThemeProvider themeProvider;
-
-  const MyApp({super.key, required this.themeProvider});
-
-  @override
-  Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider.value(value: themeProvider),
-        ChangeNotifierProvider(create: (_) => ChatProvider()),
-      ],
-      child: Consumer<ThemeProvider>(
-        builder: (context, theme, child) {
-          return MaterialApp(
-            title: 'Jobseeker Assistance',
-            debugShowCheckedModeBanner: false,
-            // Gunakan tema dinamis
-            theme: theme.lightTheme,
-            darkTheme: theme.darkTheme,
-            themeMode: theme.flutterThemeMode,
-            home: const ChatScreen(),
-          );
-        },
-      ),
-    );
-  }
-}
--e \n---\n
-FILE: lib/controllers/chat_controller.dart
-import '../providers/chat_provider.dart';
-
-class ChatController {
-  final ChatProvider chatProvider;
-
-  ChatController(this.chatProvider);
-
-  void sendMessage(String message) {
-    if (message.trim().isNotEmpty) {
-      chatProvider.sendMessage(message.trim());
+    if (_themeMode != mode) {
+      _themeMode = mode;
+      notifyListeners();
     }
   }
-}-e \n---\n
-FILE: lib/views/chat_screen.dart
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import '../providers/chat_provider.dart';
-import '../providers/theme_provider.dart';
-import '../controllers/chat_controller.dart';
+
+  void updateFromSettings(AppThemeMode mode) {
+    setThemeMode(mode);
+  }
+}
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+class GeminiService {
+  Future<String> generateResponse(String prompt, String apiKey, String model) async {
+    final url = 'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey';
+    
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'contents': [
+          {
+            'parts': [
+              {'text': prompt}
+            ]
+          }
+        ]
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['candidates'][0]['content']['parts'][0]['text'];
+    } else {
+      throw Exception('Failed to generate response from Gemini: ${response.body}');
+    }
+  }
+}
+import 'package:hive_flutter/hive_flutter.dart';
+import '../models/app_config.dart';
+import '../models/ai_provider.dart';
 import '../models/theme_mode.dart';
-import 'message_bubble.dart';
-import 'welcome_screen.dart';
+
+class HiveService {
+  static const String settingsBoxName = 'settingsBox';
+  static const String historyBoxName = 'historyBox';
+
+  Future<void> init() async {
+    await Hive.initFlutter();
+    
+    // Register Adapters
+    Hive.registerAdapter(AppSettingsAdapter());
+    Hive.registerAdapter(ChatMessageAdapter());
+    Hive.registerAdapter(AiProviderAdapter()); // Kita perlu buat ini di model
+    Hive.registerAdapter(AppThemeModeAdapter()); // Kita perlu buat ini di model
+
+    await Hive.openBox<AppSettings>(settingsBoxName);
+    await Hive.openBox<ChatMessage>(historyBoxName);
+  }
+
+  // Settings
+  Future<AppSettings> getConfig() async {
+    final box = Hive.box<AppSettings>(settingsBoxName);
+    if (box.isEmpty) {
+      final config = AppSettings();
+      await box.put('current_config', config);
+      return config;
+    }
+    return box.get('current_config')!;
+  }
+
+  Future<void> saveConfig(AppSettings config) async {
+    final box = Hive.box<AppSettings>(settingsBoxName);
+    await box.put('current_config', config);
+  }
+
+  // History
+  Future<void> saveChatMessage(String text, bool isUser) async {
+    final box = Hive.box<ChatMessage>(historyBoxName);
+    final message = ChatMessage.create(
+      text: text,
+      isUser: isUser,
+      timestamp: DateTime.now(),
+    );
+    await box.add(message);
+  }
+
+  Future<List<ChatMessage>> getChatHistory() async {
+    final box = Hive.box<ChatMessage>(historyBoxName);
+    return box.values.toList()..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+  }
+
+  Future<void> clearHistory() async {
+    final box = Hive.box<ChatMessage>(historyBoxName);
+    await box.clear();
+  }
+}
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+class OllamaService {
+  Future<String> generateResponse(String prompt, String baseUrl, String model) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/generate'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'model': model,
+        'prompt': prompt,
+        'stream': false,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['response'];
+    } else {
+      throw Exception('Failed to connect to Ollama: ${response.body}');
+    }
+  }
+}
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+class OpenAIService {
+  Future<String> generateResponse(String prompt, String apiKey, String model) async {
+    final response = await http.post(
+      Uri.parse('https://api.openai.com/v1/chat/completions'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $apiKey',
+      },
+      body: jsonEncode({
+        'model': model,
+        'messages': [
+          {'role': 'user', 'content': prompt}
+        ],
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['choices'][0]['message']['content'];
+    } else {
+      throw Exception('Failed to generate response from OpenAI: ${response.body}');
+    }
+  }
+}
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/chat_provider.dart';
+import '../providers/settings_provider.dart';
+import '../models/ai_provider.dart';
+import 'widgets/chat_bubble.dart';
+import 'widgets/settings_dialog.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -478,318 +1185,146 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final FocusNode _focusNode = FocusNode();
-  late ChatController _chatController;
-  bool _conversationStarted = false;
-  bool _showScrollToBottom = false;
-  bool _isAutoScrolling = true;
 
-  @override
-  void initState() {
-    super.initState();
-    _chatController = ChatController(context.read<ChatProvider>());
-    _setupFocusCallback();
-    _scrollController.addListener(_scrollListener);
-  }
-
-  void _scrollListener() {
-    // Jika user scroll ke atas (offset > 100 dari bawah), munculkan tombol "Scroll to Bottom"
-    // Karena ListView reverse: true, offset 0 adalah posisi paling bawah (terbaru)
-    if (_scrollController.offset > 100) {
-      if (!_showScrollToBottom) {
-        setState(() => _showScrollToBottom = true);
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
       }
-      _isAutoScrolling = false;
-    } else {
-      if (_showScrollToBottom) {
-        setState(() => _showScrollToBottom = false);
-      }
-      _isAutoScrolling = true;
-    }
-  }
-
-  void _setupFocusCallback() {
-    final chatProvider = context.read<ChatProvider>();
-    chatProvider.setOnMessageComplete(() {
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted && _focusNode.canRequestFocus) {
-          _focusNode.requestFocus();
-        }
-      });
     });
   }
 
-  void _scrollToBottom() {
-    _scrollController.animateTo(
-      0.0,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _scrollController.dispose();
-    _focusNode.dispose();
-    super.dispose();
+  void _sendMessage() {
+    final text = _controller.text.trim();
+    if (text.isNotEmpty) {
+      final settings = context.read<SettingsProvider>();
+      context.read<ChatProvider>().sendMessage(text, settings);
+      _controller.clear();
+      _scrollToBottom();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final chatProvider = context.watch<ChatProvider>();
-    final themeProvider = context.watch<ThemeProvider>();
-
-    // Efek Auto-scroll saat ada pesan baru masuk
-    // Hanya jika user sedang berada di posisi paling bawah
-    if (_isAutoScrolling && _scrollController.hasClients) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.jumpTo(0.0);
-        }
-      });
-    }
+    final settings = context.watch<SettingsProvider>();
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              height: 40,
-              width: 40,
-              child: SvgPicture.asset(
-                'assets/logo.svg',
-                fit: BoxFit.contain,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Jobseeker AI',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  'Career Assistant',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.normal,
-                    color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.7),
-                  ),
-                ),
-              ],
+            const Text('Jobseeker AI', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              '${settings.provider.displayName} - ${settings.activeModel}',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
             ),
           ],
         ),
         actions: [
-          PopupMenuButton<AppThemeMode>(
-            onSelected: (mode) => themeProvider.setThemeMode(mode),
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: AppThemeMode.system,
-                child: Text('System Theme'),
-              ),
-              const PopupMenuItem(
-                value: AppThemeMode.light,
-                child: Text('Light Theme'),
-              ),
-              const PopupMenuItem(
-                value: AppThemeMode.dark,
-                child: Text('Dark Theme'),
-              ),
-            ],
+          IconButton(
+            icon: const Icon(Icons.swap_horiz, size: 20),
+            tooltip: 'Switch Provider',
+            onPressed: () => _showQuickProviderSwitch(context, settings),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => chatProvider.clearChat(),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => showDialog(
+              context: context,
+              builder: (context) => const SettingsDialog(),
+            ),
           ),
         ],
       ),
-      body: Stack(
+      body: Column(
         children: [
-          Column(
-            children: [
-              Expanded(
-                child: chatProvider.messages.isEmpty && !_conversationStarted
-                    ? WelcomeScreen(
-                        onStartChat: () {
-                          setState(() {
-                            _conversationStarted = true;
-                          });
-                          Future.delayed(const Duration(milliseconds: 100), () {
-                            _focusNode.requestFocus();
-                          });
-                        },
-                      )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        itemCount: chatProvider.messages.length,
-                        reverse: true,
-                        itemBuilder: (context, index) {
-                          final message = chatProvider.messages[chatProvider.messages.length - 1 - index];
-                          return MessageBubble(message: message);
-                        },
-                      ),
-              ),
-              if (chatProvider.isLoading)
-                const Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: LinearProgressIndicator(),
-                ),
-              if (_conversationStarted || chatProvider.messages.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _controller,
-                          focusNode: _focusNode,
-                          decoration: const InputDecoration(
-                            hintText: 'Type your message...',
-                            border: OutlineInputBorder(),
-                          ),
-                          onSubmitted: (value) {
-                            if (value.isNotEmpty) {
-                              _chatController.sendMessage(value);
-                              _controller.clear();
-                              _isAutoScrolling = true; // Reset auto-scroll saat kirim pesan
-                            }
-                          },
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.send),
-                        onPressed: () {
-                          final message = _controller.text;
-                          if (message.isNotEmpty) {
-                            _chatController.sendMessage(message);
-                            _controller.clear();
-                            _isAutoScrolling = true; // Reset auto-scroll saat kirim pesan
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          // Tombol Scroll to Bottom (Floating)
-          if (_showScrollToBottom)
-            Positioned(
-              bottom: 100,
-              right: 20,
-              child: FloatingActionButton.small(
-                onPressed: _scrollToBottom,
-                child: const Icon(Icons.arrow_downward),
-              ),
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16),
+              itemCount: chatProvider.messages.length,
+              itemBuilder: (context, index) {
+                return ChatBubble(message: chatProvider.messages[index]);
+              },
             ),
+          ),
+          if (chatProvider.isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(),
+            ),
+          _buildInputArea(),
         ],
       ),
     );
   }
-}
--e \n---\n
-FILE: lib/views/message_bubble.dart
-import 'package:flutter/material.dart';
-import 'package:clipboard/clipboard.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:markdown/markdown.dart' as md;
-import '../models/message.dart';
-import '../views/code_wrapper.dart';
 
-class MessageBubble extends StatelessWidget {
-  final Message message;
-
-  const MessageBubble({super.key, required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    final isUser = message.isUser;
-    
-    final alignment = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    final color = isUser
-        ? Theme.of(context).colorScheme.primary
-        : Theme.of(context).colorScheme.surfaceContainerHighest;
-    final textColor = isUser
-        ? Theme.of(context).colorScheme.onPrimary
-        : Theme.of(context).colorScheme.onSurfaceVariant;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-      child: Column(
-        crossAxisAlignment: alignment,
-        children: [
-          Container(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.85,
-            ),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(16).copyWith(
-                bottomRight: isUser ? const Radius.circular(0) : const Radius.circular(16),
-                bottomLeft: !isUser ? const Radius.circular(0) : const Radius.circular(16),
-              ),
-            ),
-            child: isUser 
-              ? SelectableText(
-                  message.text,
-                  style: TextStyle(color: textColor, fontSize: 15),
-                )
-              : MarkdownBody(
-                  data: message.text,
-                  selectable: true,
-                  styleSheet: MarkdownStyleSheet(
-                    p: TextStyle(color: textColor, fontSize: 15),
-                    listBullet: TextStyle(color: textColor, fontSize: 15),
-                    code: TextStyle(
-                      backgroundColor: Colors.transparent,
-                      color: Theme.of(context).colorScheme.primary,
-                      fontFamily: 'monospace',
-                    ),
-                    codeblockDecoration: BoxDecoration(
-                      color: Colors.transparent, // Kita handle di CodeElementBuilder
-                    ),
-                  ),
-                  builders: {
-                    'code': CodeElementBuilder(),
-                  },
-                ),
-          ),
-          // Global copy button (for entire message)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: InkWell(
-              onTap: () => FlutterClipboard.copy(message.text).then(
-                (value) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Message copied to clipboard'),
-                        duration: Duration(seconds: 1),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  }
+  void _showQuickProviderSwitch(BuildContext context, SettingsProvider settings) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Wrap(
+            children: AiProvider.values.map((p) {
+              return ListTile(
+                leading: Icon(p == settings.provider ? Icons.check_circle : Icons.circle_outlined),
+                title: Text(p.displayName),
+                onTap: () {
+                  settings.setProvider(p);
+                  Navigator.pop(context);
                 },
-              ),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.copy_all_rounded, size: 14, color: Theme.of(context).hintColor),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Copy All', 
-                      style: TextStyle(
-                        fontSize: 10, 
-                        color: Theme.of(context).hintColor,
-                        fontWeight: FontWeight.w500,
-                      )
-                    ),
-                  ],
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildInputArea() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            offset: const Offset(0, -2),
+            blurRadius: 5,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              decoration: InputDecoration(
+                hintText: 'Ask about career, resume, or interview...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide.none,
                 ),
+                filled: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               ),
+              onSubmitted: (_) => _sendMessage(),
+            ),
+          ),
+          const SizedBox(width: 8),
+          CircleAvatar(
+            backgroundColor: Theme.of(context).primaryColor,
+            child: IconButton(
+              icon: const Icon(Icons.send, color: Colors.white),
+              onPressed: _sendMessage,
             ),
           ),
         ],
@@ -797,29 +1332,6 @@ class MessageBubble extends StatelessWidget {
     );
   }
 }
-
-// Builder kustom untuk menangani blok kode di Markdown
-class CodeElementBuilder extends MarkdownElementBuilder {
-  @override
-  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
-    // Ambil konten kode
-    final String language = element.attributes['class']?.replaceAll('language-', '') ?? 'text';
-    final String code = element.textContent.trim();
-
-    // Jika ini adalah blok kode (bukan inline code)
-    if (element.tag == 'code' && element.textContent.contains('\n') || element.attributes.containsKey('class')) {
-      return CodeWrapper(
-        code: code,
-        language: language,
-      );
-    }
-    
-    // Untuk inline code, biarkan default
-    return null;
-  }
-}
--e \n---\n
-FILE: lib/views/code_wrapper.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
@@ -917,23 +1429,30 @@ class CodeWrapper extends StatelessWidget {
     );
   }
 }
--e \n---\n
-FILE: lib/views/welcome_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:provider/provider.dart';
+import '../providers/settings_provider.dart';
 
 class WelcomeScreen extends StatelessWidget {
   final VoidCallback onStartChat;
+  final VoidCallback onOpenSettings;
 
-  const WelcomeScreen({super.key, required this.onStartChat});
+  const WelcomeScreen({
+    super.key,
+    required this.onStartChat,
+    required this.onOpenSettings,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).colorScheme.primary;
-    final textColor = isDark
-        ? Colors.white
-        : Colors.grey[800];
+    final textColor = isDark ? Colors.white : Colors.grey[800];
+
+    final bool? connectionStatus = settings.lastConnectionStatus;
+    final bool isReady = connectionStatus == true;
 
     return Center(
       child: SingleChildScrollView(
@@ -942,17 +1461,17 @@ class WelcomeScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Large Logo with glow effect
+              const SizedBox(height: 20),
               Container(
-                width: 120,
-                height: 120,
+                width: 100,
+                height: 100,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: primaryColor.withValues(alpha: 0.3),
-                      blurRadius: 30,
-                      spreadRadius: 5,
+                      color: primaryColor.withValues(alpha: 0.2),
+                      blurRadius: 20,
+                      spreadRadius: 2,
                     ),
                   ],
                 ),
@@ -961,142 +1480,88 @@ class WelcomeScreen extends StatelessWidget {
                   fit: BoxFit.contain,
                 ),
               ),
-              const SizedBox(height: 40),
-
-              // Welcome Title
+              const SizedBox(height: 30),
               Text(
-                'Welcome to Jobseeker AI',
+                'Jobseeker AI',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 28,
+                  fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: textColor,
                 ),
               ),
-              const SizedBox(height: 12),
-
-              // Subtitle
-              Text(
-                'Your Career Companion',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
               const SizedBox(height: 32),
 
-              // Decorative divider
-              Container(
-                width: 60,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: primaryColor,
-                  borderRadius: BorderRadius.circular(2),
+              // Status Card
+              if (connectionStatus == null)
+                _buildStatusCard(
+                  context,
+                  'Connection Required',
+                  'Please test your Ollama connection in settings.',
+                  Icons.link_off,
+                  Colors.orange,
+                )
+              else if (connectionStatus == false)
+                _buildStatusCard(
+                  context,
+                  'Connection Failed',
+                  'Could not reach ${settings.ollamaHost}. Check your IP and ensure Ollama is running.',
+                  Icons.error_outline,
+                  Colors.red,
+                )
+              else
+                _buildStatusCard(
+                  context,
+                  'Connected',
+                  'Verified connection to ${settings.ollamaHost}\nModel: ${settings.ollamaModel}',
+                  Icons.check_circle_outline,
+                  Colors.green,
                 ),
-              ),
+
               const SizedBox(height: 32),
 
-              // Description
-              Text(
-                'Get expert advice on career development, job interviews, resume optimization, and professional growth.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Colors.grey[600],
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 40),
-
-              // Quick Tips Section
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: primaryColor.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: primaryColor.withValues(alpha: 0.2),
-                    width: 1,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '💡 Quick Tips',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: primaryColor,
+              // Tombol Chat (Disembunyikan jika belum Ready)
+              if (isReady) ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: onStartChat,
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    label: const Text('Start Conversation'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    _buildTipItem(context, 'Ask about interview tips and strategies', isDark),
-                    _buildTipItem(context, 'Get resume improvement suggestions', isDark),
-                    _buildTipItem(context, 'Learn about career paths and skills', isDark),
-                    _buildTipItem(context, 'Discuss salary negotiation techniques', isDark),
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 40),
-
-              // Start Chat Button
-              Container(
+                const SizedBox(height: 12),
+              ],
+              
+              // Tombol Settings selalu tampil
+              SizedBox(
                 width: double.infinity,
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      primaryColor,
-                      primaryColor.withValues(alpha: 0.8),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: primaryColor.withValues(alpha: 0.3),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
+                height: 50,
+                child: OutlinedButton.icon(
+                  onPressed: onOpenSettings,
+                  icon: const Icon(Icons.settings),
+                  label: Text(connectionStatus == null ? 'Configure & Test' : 'Update Settings'),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: !isReady ? Colors.orange : primaryColor,
+                      width: !isReady ? 2 : 1,
                     ),
-                  ],
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: onStartChat,
-                    borderRadius: BorderRadius.circular(12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.chat_bubble_outline, color: Colors.white),
-                        SizedBox(width: 12),
-                        Text(
-                          'Start Conversation',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-
-              // Keyboard shortcut hint
-              Text(
-                'Press Tab or Ctrl+/ to focus input field',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[500],
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
+              
+              const SizedBox(height: 40),
             ],
           ),
         ),
@@ -1104,28 +1569,39 @@ class WelcomeScreen extends StatelessWidget {
     );
   }
 
-  static Widget _buildTipItem(BuildContext context, String text, bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+  Widget _buildStatusCard(BuildContext context, String title, String subtitle, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 4, right: 12),
-            child: Icon(
-              Icons.check_circle_outline,
-              size: 18,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
+          Icon(icon, color: color, size: 32),
+          const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 14,
-                color: isDark ? Colors.grey[300] : Colors.grey[700],
-                height: 1.4,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).brightness == Brightness.dark 
+                        ? Colors.grey[400] 
+                        : Colors.grey[700],
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1133,85 +1609,310 @@ class WelcomeScreen extends StatelessWidget {
     );
   }
 }
--e \n---\n
-FILE: lib/services/ollama_service.dart
-import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import '../../models/app_config.dart';
 
-class OllamaService {
-  static final OllamaService _instance = OllamaService._internal();
+class ChatBubble extends StatelessWidget {
+  final ChatMessage message;
 
-  OllamaService._internal();
+  const ChatBubble({super.key, required this.message});
 
-  factory OllamaService() {
-    return _instance;
-  }
+  @override
+  Widget build(BuildContext context) {
+    final isUser = message.isUser;
+    final theme = Theme.of(context);
 
-  // Gunakan dynamic untuk menghindari error type Process di Web
-  dynamic _process;
-  bool _initialized = false;
-
-  Future<void> initialize() async {
-    if (_initialized) return;
-
-    // JANGAN jalankan kode ini di Web karena dart:io akan crash
-    if (kIsWeb) {
-      debugPrint('OllamaService: Web platform detected, skipping local process management.');
-      _initialized = true;
-      return;
-    }
-
-    try {
-      debugPrint('Initializing Ollama service...');
-
-      // Check if ollama is already running
-      final checkResponse = await _checkOllamaStatus();
-      if (checkResponse) {
-        debugPrint('Ollama is already running');
-        _initialized = true;
-        return;
-      }
-
-      // Start ollama if not running
-      debugPrint('Starting Ollama...');
-      _process = await Process.start('ollama', ['serve']);
-
-      // Wait a bit for ollama to start
-      await Future.delayed(const Duration(seconds: 3));
-
-      // Now run the model
-      debugPrint('Running qwen2.5-coder:3b model...');
-      await Process.run('ollama', ['run', 'qwen2.5-coder:3b']).timeout(
-        const Duration(minutes: 2),
-        onTimeout: () {
-          debugPrint('Model loading timed out, but it should be in background');
-          return ProcessResult(0, 0, '', '');
-        },
-      );
-
-      _initialized = true;
-      debugPrint('Ollama initialization complete');
-    } catch (e) {
-      debugPrint('Error initializing Ollama: $e');
-      _initialized = true;
-    }
-  }
-
-  Future<bool> _checkOllamaStatus() async {
-    if (kIsWeb) return true;
-    try {
-      final result = await Process.run('curl', ['-s', 'http://localhost:11434/api/tags'])
-          .timeout(const Duration(seconds: 5));
-      return result.exitCode == 0;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  Future<void> dispose() async {
-    if (!kIsWeb && _process != null) {
-      (_process as Process).kill();
-    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!isUser) ...[
+            CircleAvatar(
+              backgroundColor: theme.colorScheme.secondary,
+              radius: 16,
+              child: const Icon(Icons.smart_toy_outlined, size: 18, color: Colors.white),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isUser 
+                    ? theme.colorScheme.primary 
+                    : theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: Radius.circular(isUser ? 16 : 0),
+                  bottomRight: Radius.circular(isUser ? 0 : 16),
+                ),
+              ),
+              child: Text(
+                message.text,
+                style: TextStyle(
+                  color: isUser ? Colors.white : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+          if (isUser) ...[
+            const SizedBox(width: 8),
+            CircleAvatar(
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+              radius: 16,
+              child: Icon(Icons.person_outline, size: 18, color: theme.colorScheme.primary),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
--e \n---\n
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../providers/theme_provider.dart';
+import '../../models/ai_provider.dart';
+import '../../models/theme_mode.dart';
+
+class SettingsDialog extends StatefulWidget {
+  const SettingsDialog({super.key});
+
+  @override
+  State<SettingsDialog> createState() => _SettingsDialogState();
+}
+
+class _SettingsDialogState extends State<SettingsDialog> {
+  late TextEditingController _ollamaHost;
+  late TextEditingController _ollamaPort;
+  late TextEditingController _ollamaModel;
+  
+  late TextEditingController _geminiKey;
+  late TextEditingController _geminiModel;
+
+  late TextEditingController _openaiKey;
+  late TextEditingController _openaiModel;
+
+  late TextEditingController _anthropicKey;
+  late TextEditingController _anthropicModel;
+
+  @override
+  void initState() {
+    super.initState();
+    final settings = context.read<SettingsProvider>();
+    _ollamaHost = TextEditingController(text: settings.ollamaHost);
+    _ollamaPort = TextEditingController(text: settings.ollamaPort.toString());
+    _ollamaModel = TextEditingController(text: settings.ollamaModel);
+
+    _geminiKey = TextEditingController(text: settings.geminiKey);
+    _geminiModel = TextEditingController(text: settings.geminiModel);
+
+    _openaiKey = TextEditingController(text: settings.openAIKey);
+    _openaiModel = TextEditingController(text: settings.openAIModel);
+
+    _anthropicKey = TextEditingController(text: settings.anthropicKey);
+    _anthropicModel = TextEditingController(text: settings.anthropicModel);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final settings = context.watch<SettingsProvider>();
+
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.settings, size: 24),
+          SizedBox(width: 12),
+          Text('Settings'),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Theme Section
+              const _SectionHeader(title: 'Appearance'),
+              const SizedBox(height: 8),
+              SegmentedButton<AppThemeMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: AppThemeMode.system,
+                    icon: Icon(Icons.brightness_auto),
+                    label: Text('System'),
+                  ),
+                  ButtonSegment(
+                    value: AppThemeMode.light,
+                    icon: Icon(Icons.light_mode),
+                    label: Text('Light'),
+                  ),
+                  ButtonSegment(
+                    value: AppThemeMode.dark,
+                    icon: Icon(Icons.dark_mode),
+                    label: Text('Dark'),
+                  ),
+                ],
+                selected: {themeProvider.themeMode},
+                onSelectionChanged: (Set<AppThemeMode> newSelection) {
+                  themeProvider.setThemeMode(newSelection.first);
+                },
+              ),
+              const SizedBox(height: 16),
+              const Divider(),
+
+              // Provider Selection
+              const _SectionHeader(title: 'AI Provider'),
+              DropdownButtonFormField<AiProvider>(
+                initialValue: settings.provider,
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+                items: AiProvider.values.map((p) {
+                  return DropdownMenuItem(value: p, child: Text(p.displayName));
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) settings.setProvider(val);
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Conditional Forms
+              if (settings.provider == AiProvider.ollama) _buildOllamaForm(),
+              if (settings.provider == AiProvider.gemini) _buildGeminiForm(),
+              if (settings.provider == AiProvider.openai) _buildOpenAIForm(),
+              if (settings.provider == AiProvider.anthropic) _buildAnthropicForm(),
+
+              const SizedBox(height: 20),
+              
+              // Connection Test Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: settings.isCheckingConnection ? null : () async {
+                    _saveSpecificSettings(settings);
+                    final success = await settings.checkConnection();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(success ? '✅ Connection Successful!' : '❌ Connection Failed!'),
+                          backgroundColor: success ? Colors.green : Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  icon: settings.isCheckingConnection 
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.bolt),
+                  label: const Text('Test & Save'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+      ],
+    );
+  }
+
+  void _saveSpecificSettings(SettingsProvider settings) {
+    switch (settings.provider) {
+      case AiProvider.ollama:
+        settings.updateOllama(_ollamaHost.text, int.tryParse(_ollamaPort.text) ?? 11434, _ollamaModel.text);
+        break;
+      case AiProvider.gemini:
+        settings.updateGemini(_geminiKey.text, _geminiModel.text);
+        break;
+      case AiProvider.openai:
+        settings.updateOpenAI(_openaiKey.text, _openaiModel.text);
+        break;
+      case AiProvider.anthropic:
+        settings.updateAnthropic(_anthropicKey.text, _anthropicModel.text);
+        break;
+    }
+  }
+
+  Widget _buildOllamaForm() {
+    return Column(
+      children: [
+        TextField(controller: _ollamaHost, decoration: const InputDecoration(labelText: 'Host (e.g. 192.168.1.5)')),
+        TextField(controller: _ollamaPort, decoration: const InputDecoration(labelText: 'Port (default 11434)')),
+        TextField(controller: _ollamaModel, decoration: const InputDecoration(labelText: 'Model Name')),
+      ],
+    );
+  }
+
+  Widget _buildGeminiForm() {
+    return Column(
+      children: [
+        TextField(controller: _geminiKey, decoration: const InputDecoration(labelText: 'Google API Key'), obscureText: true),
+        TextField(controller: _geminiModel, decoration: const InputDecoration(labelText: 'Model (gemini-1.5-flash)')),
+      ],
+    );
+  }
+
+  Widget _buildOpenAIForm() {
+    return Column(
+      children: [
+        TextField(controller: _openaiKey, decoration: const InputDecoration(labelText: 'OpenAI API Key'), obscureText: true),
+        TextField(controller: _openaiModel, decoration: const InputDecoration(labelText: 'Model (gpt-4o-mini)')),
+      ],
+    );
+  }
+
+  Widget _buildAnthropicForm() {
+    return Column(
+      children: [
+        TextField(controller: _anthropicKey, decoration: const InputDecoration(labelText: 'Anthropic API Key'), obscureText: true),
+        TextField(controller: _anthropicModel, decoration: const InputDecoration(labelText: 'Model (claude-3-5-sonnet)')),
+      ],
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blue)),
+      ),
+    );
+  }
+}
+// This is a basic Flutter widget test.
+//
+// To perform an interaction with a widget in your test, use the WidgetTester
+// utility in the flutter_test package. For example, you can send tap and scroll
+// gestures. You can also use WidgetTester to find child widgets in the widget
+// tree, read text, and verify that the values of widget properties are correct.
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
+    // Build our app and trigger a frame.
+
+    // Verify that our counter starts at 0.
+    expect(find.text('0'), findsOneWidget);
+    expect(find.text('1'), findsNothing);
+
+    // Tap the '+' icon and trigger a frame.
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pump();
+
+    // Verify that our counter has incremented.
+    expect(find.text('0'), findsNothing);
+    expect(find.text('1'), findsOneWidget);
+  });
+}

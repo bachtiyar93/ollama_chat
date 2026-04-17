@@ -16,23 +16,18 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChatProvider>().setOnMessageComplete(_scrollToBottom);
-    });
-  }
+  final FocusNode _focusNode = FocusNode();
 
   void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   void _sendMessage() {
@@ -42,6 +37,32 @@ class _ChatScreenState extends State<ChatScreen> {
       context.read<ChatProvider>().sendMessage(text, settings);
       _controller.clear();
       _scrollToBottom();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-focus on text field when response is received
+    context.read<ChatProvider>().addListener(_onChatProviderChanged);
+  }
+
+  @override
+  void dispose() {
+    context.read<ChatProvider>().removeListener(_onChatProviderChanged);
+    _controller.dispose();
+    _scrollController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onChatProviderChanged() {
+    final chatProvider = context.read<ChatProvider>();
+    // Auto-focus when loading is complete (response received)
+    if (!chatProvider.isLoading && chatProvider.messages.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _focusNode.requestFocus();
+      });
     }
   }
 
@@ -63,7 +84,6 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
-          // Model Switcher Mini
           IconButton(
             icon: const Icon(Icons.swap_horiz, size: 20),
             tooltip: 'Switch Provider',
@@ -71,7 +91,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
-            onPressed: () => chatProvider.clearMessages(),
+            onPressed: () => chatProvider.clearChat(),
           ),
           IconButton(
             icon: const Icon(Icons.settings),
@@ -145,6 +165,7 @@ class _ChatScreenState extends State<ChatScreen> {
           Expanded(
             child: TextField(
               controller: _controller,
+              focusNode: _focusNode,
               decoration: InputDecoration(
                 hintText: 'Ask about career, resume, or interview...',
                 border: OutlineInputBorder(

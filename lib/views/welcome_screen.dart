@@ -74,7 +74,7 @@ class WelcomeScreen extends StatelessWidget {
                 _buildStatusCard(
                   context,
                   'Connection Failed',
-                  'Could not reach ${settings.host}. Check your IP and ensure Ollama is running.',
+                  'Could not reach ${settings.ollamaHost}. Check your IP and ensure Ollama is running.',
                   Icons.error_outline,
                   Colors.red,
                 )
@@ -82,7 +82,7 @@ class WelcomeScreen extends StatelessWidget {
                 _buildStatusCard(
                   context,
                   'Connected',
-                  'Verified connection to ${settings.host}\nModel: ${settings.modelName}',
+                  'Verified connection to ${settings.ollamaHost}\nModel: ${settings.ollamaModel}',
                   Icons.check_circle_outline,
                   Colors.green,
                 ),

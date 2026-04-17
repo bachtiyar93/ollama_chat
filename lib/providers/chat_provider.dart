@@ -1,194 +1,133 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../models/message.dart';
+import '../models/app_config.dart';
+import '../services/hive_service.dart';
+import '../services/ollama_service.dart';
+import '../services/gemini_service.dart';
+import '../services/openai_service.dart';
 import '../models/ai_provider.dart';
 import 'settings_provider.dart';
 
 class ChatProvider with ChangeNotifier {
-  final List<Message> _messages = [];
-  String _summary = '';
+  final HiveService _hiveService;
+  final OllamaService _ollamaService;
+  final GeminiService _geminiService;
+  final OpenAIService _openAIService;
+
+  List<ChatMessage> _messages = [];
   bool _isLoading = false;
-  VoidCallback? _onMessageComplete;
 
-  static const String _systemPrompt = '''You are Jobseeker AI, a professional career assistant created to help job seekers with career guidance, interview preparation, resume optimization, salary negotiation, and professional development.
-
-Your name is Jobseeker AI. You are a specialized career assistant.
-
-Guidelines:
-- ALWAYS respond using the same language as the user's input.
-- Stay in character as a career assistant.
-- Use the provided conversation history to maintain context.''';
-
-  List<Message> get messages => _messages;
+  List<ChatMessage> get messages => _messages;
   bool get isLoading => _isLoading;
 
-  void setOnMessageComplete(VoidCallback callback) {
-    _onMessageComplete = callback;
+  ChatProvider(
+    this._hiveService,
+    this._ollamaService,
+    this._geminiService,
+    this._openAIService,
+  );
+
+  Future<void> loadHistory() async {
+    _messages = await _hiveService.getChatHistory();
+    notifyListeners();
   }
 
-  List<Map<String, String>> _buildChatMessages(String currentMessage) {
-    List<Map<String, String>> chatMessages = [];
-    chatMessages.add({'role': 'system', 'content': _systemPrompt});
+  Future<void> sendMessage(String text, SettingsProvider settings) async {
+    if (text.trim().isEmpty) return;
 
-    if (_summary.isNotEmpty) {
-      chatMessages.add({
-        'role': 'system',
-        'content': 'Summary of previous conversation: $_summary'
-      });
-    }
-
-    int start = _messages.length > 11 ? _messages.length - 11 : 0;
-    List<Message> recentMessages = _messages.sublist(start, _messages.isNotEmpty ? _messages.length - 1 : 0);
-
-    for (final msg in recentMessages) {
-      chatMessages.add({
-        'role': msg.isUser ? 'user' : 'assistant',
-        'content': msg.text,
-      });
-    }
-
-    chatMessages.add({'role': 'user', 'content': currentMessage});
-    return chatMessages;
-  }
-
-  Future<void> sendMessage(String userMessage, SettingsProvider settings) async {
-    final userMsg = Message(text: userMessage, isUser: true, timestamp: DateTime.now());
+    // 1. Simpan & Tampilkan pesan User
+    final userMsg = ChatMessage.create(
+      text: text,
+      isUser: true,
+      timestamp: DateTime.now(),
+    );
     _messages.add(userMsg);
+    await _hiveService.saveChatMessage(text, true);
     notifyListeners();
 
     _isLoading = true;
     notifyListeners();
 
-    final aiMsg = Message(text: '', isUser: false, timestamp: DateTime.now());
-    _messages.add(aiMsg);
-    int aiMsgIndex = _messages.length - 1;
-
     try {
+      String responseText = '';
+      ChatMessage? streamingMessage;
+
+      // 2. Kirim ke Provider yang sesuai dengan streaming support
       switch (settings.provider) {
         case AiProvider.ollama:
-          await _sendOllamaRequest(userMessage, settings, aiMsgIndex);
+          // Create initial empty AI message for streaming
+          streamingMessage = ChatMessage.create(
+            text: '',
+            isUser: false,
+            timestamp: DateTime.now(),
+          );
+          _messages.add(streamingMessage);
+
+          await _ollamaService.generateStreamingResponse(
+            text,
+            settings.ollamaBaseUrl,
+            settings.ollamaModel,
+            (chunk) {
+              responseText += chunk;
+              // Update the streaming message in real-time
+              if (streamingMessage != null) {
+                final updatedMessage = streamingMessage.copyWith(text: responseText);
+                final index = _messages.indexOf(streamingMessage);
+                if (index != -1) {
+                  _messages[index] = updatedMessage;
+                  notifyListeners();
+                }
+              }
+            },
+          );
           break;
         case AiProvider.gemini:
-          await _sendGeminiRequest(userMessage, settings, aiMsgIndex);
+          responseText = await _geminiService.generateResponse(
+            text,
+            settings.geminiKey,
+            settings.geminiModel,
+          );
           break;
         case AiProvider.openai:
-          await _sendOpenAIRequest(userMessage, settings, aiMsgIndex);
+          responseText = await _openAIService.generateResponse(
+            text,
+            settings.openAIKey,
+            settings.openAIModel,
+          );
           break;
         case AiProvider.anthropic:
-          await _sendAnthropicRequest(userMessage, settings, aiMsgIndex);
+          responseText = "Anthropic support coming soon...";
           break;
       }
 
-      if (_messages.length % 15 == 0) {
-        _generateSummary(settings);
+      // For non-streaming providers, add the message after completion
+      if (settings.provider != AiProvider.ollama) {
+        final aiMsg = ChatMessage.create(
+          text: responseText,
+          isUser: false,
+          timestamp: DateTime.now(),
+        );
+        _messages.add(aiMsg);
       }
+      
+      // Save the final response
+      await _hiveService.saveChatMessage(responseText, false);
+      
     } catch (e) {
-      _messages[aiMsgIndex] = Message(
-        text: '❌ Error: ${e.toString()}',
+      final errorMsg = ChatMessage.create(
+        text: 'Error: $e',
         isUser: false,
         timestamp: DateTime.now(),
       );
+      _messages.add(errorMsg);
+    } finally {
       _isLoading = false;
       notifyListeners();
     }
-
-    if (_onMessageComplete != null) {
-      _onMessageComplete?.call();
-    }
   }
 
-  Future<void> _sendOllamaRequest(String userMessage, SettingsProvider settings, int aiMsgIndex) async {
-    final chatMessages = _buildChatMessages(userMessage);
-    final response = await http.Client().send(http.Request('POST', Uri.parse("${settings.ollamaBaseUrl}/api/chat"))
-      ..headers['Content-Type'] = 'application/json'
-      ..body = jsonEncode({
-        'model': settings.ollamaModel,
-        'messages': chatMessages,
-        'stream': true,
-      }));
-
-    if (response.statusCode == 200) {
-      _isLoading = false;
-      notifyListeners();
-      StringBuffer accumulatedText = StringBuffer();
-      await response.stream.transform(utf8.decoder).transform(const LineSplitter()).forEach((line) {
-        if (line.isNotEmpty) {
-          final data = jsonDecode(line);
-          final chunk = data['message']?['content'] ?? '';
-          accumulatedText.write(chunk);
-          _messages[aiMsgIndex] = Message(text: accumulatedText.toString(), isUser: false, timestamp: DateTime.now());
-          notifyListeners();
-        }
-      });
-    } else {
-      throw Exception('Ollama error: ${response.statusCode}');
-    }
-  }
-
-  Future<void> _sendGeminiRequest(String userMessage, SettingsProvider settings, int aiMsgIndex) async {
-    final url = "https://generativelanguage.googleapis.com/v1beta/models/${settings.geminiModel}:streamGenerateContent?key=${settings.geminiKey}";
-    
-    // Gemini uses a different message structure
-    final contents = _messages.take(_messages.length - 1).map((m) => {
-      'role': m.isUser ? 'user' : 'model',
-      'parts': [{'text': m.text}]
-    }).toList();
-
-    final response = await http.post(Uri.parse(url), body: jsonEncode({'contents': contents}));
-
-    if (response.statusCode == 200) {
-      _isLoading = false;
-      final List<dynamic> data = jsonDecode(response.body);
-      String fullText = "";
-      for (var part in data) {
-        fullText += part['candidates'][0]['content']['parts'][0]['text'];
-      }
-      _messages[aiMsgIndex] = Message(text: fullText, isUser: false, timestamp: DateTime.now());
-      notifyListeners();
-    } else {
-      throw Exception('Gemini error: ${response.body}');
-    }
-  }
-
-  Future<void> _sendOpenAIRequest(String userMessage, SettingsProvider settings, int aiMsgIndex) async {
-    final response = await http.post(
-      Uri.parse('https://api.openai.com/v1/chat/completions'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${settings.openAIKey}',
-      },
-      body: jsonEncode({
-        'model': settings.openAIModel,
-        'messages': _buildChatMessages(userMessage),
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      _isLoading = false;
-      final data = jsonDecode(response.body);
-      final content = data['choices'][0]['message']['content'];
-      _messages[aiMsgIndex] = Message(text: content, isUser: false, timestamp: DateTime.now());
-      notifyListeners();
-    } else {
-      throw Exception('OpenAI error: ${response.body}');
-    }
-  }
-
-  Future<void> _sendAnthropicRequest(String userMessage, SettingsProvider settings, int aiMsgIndex) async {
-    // Implement Anthropic API call here (similar to OpenAI)
-    _isLoading = false;
-    _messages[aiMsgIndex] = Message(text: "Claude support coming soon!", isUser: false, timestamp: DateTime.now());
-    notifyListeners();
-  }
-
-  Future<void> _generateSummary(SettingsProvider settings) async {
-    // Summary logic remains similar, ideally using the current active provider
-  }
-
-  void clearMessages() {
+  Future<void> clearChat() async {
+    await _hiveService.clearHistory();
     _messages.clear();
-    _summary = '';
     notifyListeners();
   }
 }

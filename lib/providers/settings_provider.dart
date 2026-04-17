@@ -1,128 +1,97 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
 import '../models/ai_provider.dart';
+import '../models/theme_mode.dart';
+import '../models/app_config.dart';
+import '../services/hive_service.dart';
+import 'package:http/http.dart' as http;
 
 class SettingsProvider with ChangeNotifier {
-  // Current Active Provider
-  AiProvider _provider = AiProvider.ollama;
-
-  // Ollama Settings
-  String _ollamaHost = 'localhost';
-  int _ollamaPort = 11434;
-  String _ollamaModel = 'qwen2.5-coder:3b';
-
-  // API Keys & Models
-  String _geminiKey = '';
-  String _geminiModel = 'gemini-1.5-flash';
+  final HiveService _hiveService;
+  AppSettings _config = AppSettings();
   
-  String _openAIKey = '';
-  String _openAIModel = 'gpt-4o-mini';
-
-  String _anthropicKey = '';
-  String _anthropicModel = 'claude-3-5-sonnet-20240620';
-
   bool _isCheckingConnection = false;
   bool? _lastConnectionStatus;
 
-  // Getters
-  AiProvider get provider => _provider;
-  String get ollamaHost => _ollamaHost;
-  int get ollamaPort => _ollamaPort;
-  String get ollamaModel => _ollamaModel;
+  SettingsProvider(this._hiveService);
+
+  AiProvider get provider => _config.provider;
+  AppThemeMode get themeMode => _config.themeMode;
   
-  String get geminiKey => _geminiKey;
-  String get geminiModel => _geminiModel;
+  String get ollamaHost => _config.ollamaHost;
+  int get ollamaPort => _config.ollamaPort;
+  String get ollamaModel => _config.ollamaModel;
   
-  String get openAIKey => _openAIKey;
-  String get openAIModel => _openAIModel;
+  String get geminiKey => _config.geminiKey;
+  String get geminiModel => _config.geminiModel;
   
-  String get anthropicKey => _anthropicKey;
-  String get anthropicModel => _anthropicModel;
+  String get openAIKey => _config.openAIKey;
+  String get openAIModel => _config.openAIModel;
+  
+  String get anthropicKey => _config.anthropicKey;
+  String get anthropicModel => _config.anthropicModel;
 
   bool get isCheckingConnection => _isCheckingConnection;
   bool? get lastConnectionStatus => _lastConnectionStatus;
 
-  // Helper Getters for Active Config
   String get activeModel {
-    switch (_provider) {
-      case AiProvider.ollama: return _ollamaModel;
-      case AiProvider.gemini: return _geminiModel;
-      case AiProvider.openai: return _openAIModel;
-      case AiProvider.anthropic: return _anthropicModel;
+    switch (provider) {
+      case AiProvider.ollama: return ollamaModel;
+      case AiProvider.gemini: return geminiModel;
+      case AiProvider.openai: return openAIModel;
+      case AiProvider.anthropic: return anthropicModel;
     }
   }
 
-  String get ollamaBaseUrl => 'http://$_ollamaHost:$_ollamaPort';
+  String get ollamaBaseUrl => 'http://$ollamaHost:$ollamaPort';
 
   Future<void> loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    _provider = AiProvider.values[prefs.getInt('ai_provider') ?? 0];
-    
-    _ollamaHost = prefs.getString('ollama_host') ?? 'localhost';
-    _ollamaPort = prefs.getInt('ollama_port') ?? 11434;
-    _ollamaModel = prefs.getString('ollama_model') ?? 'qwen2.5-coder:3b';
-
-    _geminiKey = prefs.getString('gemini_key') ?? '';
-    _geminiModel = prefs.getString('gemini_model') ?? 'gemini-1.5-flash';
-
-    _openAIKey = prefs.getString('openai_key') ?? '';
-    _openAIModel = prefs.getString('openai_model') ?? 'gpt-4o-mini';
-
-    _anthropicKey = prefs.getString('anthropic_key') ?? '';
-    _anthropicModel = prefs.getString('anthropic_model') ?? 'claude-3-5-sonnet-20240620';
-    
+    _config = await _hiveService.getConfig();
     notifyListeners();
   }
 
   Future<void> setProvider(AiProvider provider) async {
-    _provider = provider;
+    _config.provider = provider;
     _lastConnectionStatus = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('ai_provider', provider.index);
+    await _hiveService.saveConfig(_config);
     notifyListeners();
   }
 
-  // Setters with persistence
+  Future<void> setThemeMode(AppThemeMode mode) async {
+    _config.themeMode = mode;
+    await _hiveService.saveConfig(_config);
+    notifyListeners();
+  }
+
   Future<void> updateOllama(String host, int port, String model) async {
-    _ollamaHost = host;
-    _ollamaPort = port;
-    _ollamaModel = model;
+    _config.ollamaHost = host;
+    _config.ollamaPort = port;
+    _config.ollamaModel = model;
     _lastConnectionStatus = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('ollama_host', host);
-    await prefs.setInt('ollama_port', port);
-    await prefs.setString('ollama_model', model);
+    await _hiveService.saveConfig(_config);
     notifyListeners();
   }
 
   Future<void> updateGemini(String key, String model) async {
-    _geminiKey = key;
-    _geminiModel = model;
+    _config.geminiKey = key;
+    _config.geminiModel = model;
     _lastConnectionStatus = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('gemini_key', key);
-    await prefs.setString('gemini_model', model);
+    await _hiveService.saveConfig(_config);
     notifyListeners();
   }
 
   Future<void> updateOpenAI(String key, String model) async {
-    _openAIKey = key;
-    _openAIModel = model;
+    _config.openAIKey = key;
+    _config.openAIModel = model;
     _lastConnectionStatus = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('openai_key', key);
-    await prefs.setString('openai_model', model);
+    await _hiveService.saveConfig(_config);
     notifyListeners();
   }
 
   Future<void> updateAnthropic(String key, String model) async {
-    _anthropicKey = key;
-    _anthropicModel = model;
+    _config.anthropicKey = key;
+    _config.anthropicModel = model;
     _lastConnectionStatus = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('anthropic_key', key);
-    await prefs.setString('anthropic_model', model);
+    await _hiveService.saveConfig(_config);
     notifyListeners();
   }
 
@@ -133,26 +102,24 @@ class SettingsProvider with ChangeNotifier {
 
     try {
       bool success = false;
-      switch (_provider) {
+      switch (provider) {
         case AiProvider.ollama:
           final response = await http.get(Uri.parse('$ollamaBaseUrl/api/tags')).timeout(const Duration(seconds: 5));
           success = response.statusCode == 200;
           break;
         case AiProvider.gemini:
-          // Simple check for Gemini (usually needs a valid key to even hit the models endpoint)
-          final response = await http.get(Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$_geminiKey'));
+          final response = await http.get(Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$geminiKey'));
           success = response.statusCode == 200;
           break;
         case AiProvider.openai:
           final response = await http.get(
             Uri.parse('https://api.openai.com/v1/models'),
-            headers: {'Authorization': 'Bearer $_openAIKey'},
+            headers: {'Authorization': 'Bearer $openAIKey'},
           );
           success = response.statusCode == 200;
           break;
         case AiProvider.anthropic:
-          // Anthropic doesn't have a simple public "check" without a full request or specific headers
-          success = _anthropicKey.isNotEmpty; 
+          success = anthropicKey.isNotEmpty;
           break;
       }
       
