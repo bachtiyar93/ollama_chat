@@ -11,24 +11,47 @@ class ChatProvider with ChangeNotifier {
 
   static const String _systemPrompt = '''You are Jobseeker AI, a professional career assistant created to help job seekers with career guidance, interview preparation, resume optimization, salary negotiation, and professional development.
 
-Your name is Jobseeker AI (not Qwen, not Claude, not any other AI). You are a specialized career assistant.
+Your name is Jobseeker AI. You are a specialized career assistant.
 
 Guidelines:
-- Always identify yourself as "Jobseeker AI" or "Jobseeker Assistance"
-- Provide practical, actionable career advice
-- Focus on job search strategies, interview tips, resume improvements, and professional growth
-- Be encouraging and supportive
-- Give specific examples when possible
-- Ask clarifying questions if needed
-- ALWAYS respond using the same language as the user's input. If the user asks in Indonesian, answer in Indonesian. If the user asks in English, answer in English.
-
-Remember: You are Jobseeker AI, your role is to be a career companion for job seekers.''';
+- ALWAYS respond using the same language as the user's input.
+- Stay in character as a career assistant.
+- Use the provided conversation history to maintain context.''';
 
   List<Message> get messages => _messages;
   bool get isLoading => _isLoading;
 
   void setOnMessageComplete(VoidCallback callback) {
     _onMessageComplete = callback;
+  }
+
+  // Fungsi untuk membangun prompt dengan konteks yang "cerdas" (Ringan tapi tetap ingat tujuan)
+  String _buildContextPrompt(String currentMessage) {
+    StringBuffer prompt = StringBuffer();
+    prompt.writeln("System: $_systemPrompt");
+    prompt.writeln("\nConversation History:");
+    
+    // STRATEGI: Ambil 2 pesan awal (tujuan) + 8 pesan terakhir (aliran diskusi)
+    List<Message> contextMessages = [];
+    
+    if (_messages.length > 10) {
+      // Ambil 2 pertama (Penting untuk tahu topik utama diskusi)
+      contextMessages.addAll(_messages.take(2));
+      prompt.writeln("... (beberapa pesan sebelumnya disederhanakan) ...");
+      // Ambil 8 terakhir (Penting untuk alur diskusi saat ini)
+      // -1 karena pesan terakhir saat ini adalah placeholder AI yang sedang diproses
+      contextMessages.addAll(_messages.sublist(_messages.length - 9, _messages.length - 1));
+    } else {
+      contextMessages.addAll(_messages.take(_messages.length - 1));
+    }
+
+    for (final msg in contextMessages) {
+      prompt.writeln("${msg.isUser ? 'User' : 'Jobseeker AI'}: ${msg.text}");
+    }
+
+    prompt.writeln("\nCurrent User Question: $currentMessage");
+    prompt.writeln("\nJobseeker AI:");
+    return prompt.toString();
   }
 
   Future<void> sendMessage(String userMessage) async {
@@ -43,7 +66,6 @@ Remember: You are Jobseeker AI, your role is to be a career companion for job se
     _isLoading = true;
     notifyListeners();
 
-    // Buat placeholder pesan AI untuk streaming
     final aiMsg = Message(
       text: '',
       isUser: false,
@@ -53,13 +75,10 @@ Remember: You are Jobseeker AI, your role is to be a career companion for job se
     int aiMsgIndex = _messages.length - 1;
 
     try {
-      final fullPrompt = '$_systemPrompt\n\nUser: $userMessage\n\nJobseeker AI:';
+      // Gunakan prompt yang sudah menyertakan riwayat percakapan
+      final fullPrompt = _buildContextPrompt(userMessage);
 
-      // Gunakan IP Statis atau deteksi otomatis yang aman
       String ollamaHost = '192.168.0.208'; 
-      
-      // Jika di web, kita bisa mencoba mengambil dari host saat ini
-      // Menggunakan pendekatan yang aman tanpa direct dart:html
       if (kIsWeb) {
         ollamaHost = Uri.base.host.isNotEmpty && Uri.base.host != 'localhost' 
             ? Uri.base.host 
@@ -77,6 +96,10 @@ Remember: You are Jobseeker AI, your role is to be a career companion for job se
         'model': 'qwen2.5-coder:3b',
         'prompt': fullPrompt,
         'stream': true,
+        'options': {
+          'num_ctx': 4096, // Memperbesar context window
+          'temperature': 0.7,
+        }
       });
 
       final response = await client.send(request);
@@ -86,7 +109,6 @@ Remember: You are Jobseeker AI, your role is to be a career companion for job se
         notifyListeners();
 
         StringBuffer accumulatedText = StringBuffer();
-        
         await response.stream
             .transform(utf8.decoder)
             .transform(const LineSplitter())
@@ -113,7 +135,7 @@ Remember: You are Jobseeker AI, your role is to be a career companion for job se
       }
     } catch (e) {
       _messages[aiMsgIndex] = Message(
-        text: 'Error: $e. Pastikan Ollama aktif dan OLLAMA_HOST=0.0.0.0 sudah diatur.',
+        text: 'Error: $e. Pastikan Ollama aktif.',
         isUser: false,
         timestamp: DateTime.now(),
       );

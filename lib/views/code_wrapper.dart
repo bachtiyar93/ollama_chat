@@ -1,63 +1,95 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_highlight/flutter_highlight.dart';
-import 'package:flutter_highlight/themes/github.dart';
+import 'package:flutter_highlight/themes/atom-one-dark.dart';
+import 'package:flutter_highlight/themes/atom-one-light.dart';
 import 'package:clipboard/clipboard.dart';
 
 class CodeWrapper extends StatelessWidget {
-  final String text;
+  final String code;
+  final String language;
 
-  const CodeWrapper({super.key, required this.text});
+  const CodeWrapper({super.key, required this.code, this.language = 'text'});
 
   @override
   Widget build(BuildContext context) {
-    // Extract code from ``` blocks if present
-    String code = text;
-    String language = 'dart'; // Default
-
-    final codeBlockRegex = RegExp(r'```(\w+)?\n?(.*?)\n?```', dotAll: true);
-    final match = codeBlockRegex.firstMatch(text);
-    if (match != null) {
-      language = match.group(1) ?? 'dart';
-      code = match.group(2) ?? text;
-    }
-
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Container(
-      padding: const EdgeInsets.all(8),
+      margin: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Theme.of(context).dividerColor),
+        color: isDark ? const Color(0xFF282C34) : const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.1)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                language.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.copy, size: 16),
-                onPressed: () => FlutterClipboard.copy(code).then(
-                  (value) => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Code copied to clipboard')),
+          // Header: Language name & Copy Button
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.black26 : Colors.grey.shade300,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  language.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
                   ),
                 ),
-              ),
-            ],
+                InkWell(
+                  onTap: () => FlutterClipboard.copy(code).then(
+                    (value) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Code copied to clipboard'),
+                            duration: Duration(seconds: 1),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.copy_rounded, 
+                        size: 14, 
+                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade700
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Copy',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? Colors.grey.shade400 : Colors.grey.shade700
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          HighlightView(
-            code,
-            language: language,
-            theme: githubTheme,
-            padding: const EdgeInsets.all(8),
-            textStyle: const TextStyle(fontSize: 14),
+          // Code Content
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: HighlightView(
+              code,
+              language: language,
+              theme: isDark ? atomOneDarkTheme : atomOneLightTheme,
+              padding: const EdgeInsets.all(12),
+              textStyle: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+              ),
+            ),
           ),
         ],
       ),

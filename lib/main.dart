@@ -29,10 +29,14 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ChatProvider()),
       ],
       child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, child) {
+        builder: (context, theme, child) {
           return MaterialApp(
             title: 'Jobseeker Assistance',
-            theme: themeProvider.themeData,
+            debugShowCheckedModeBanner: false,
+            // Gunakan tema dinamis
+            theme: theme.lightTheme,
+            darkTheme: theme.darkTheme,
+            themeMode: theme.flutterThemeMode,
             home: const ChatScreen(),
           );
         },

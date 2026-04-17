@@ -7,16 +7,30 @@ class ThemeProvider with ChangeNotifier {
 
   AppThemeMode get themeMode => _themeMode;
 
-  ThemeData get themeData {
+  // Mengonversi AppThemeMode kita ke ThemeMode bawaan Flutter
+  ThemeMode get flutterThemeMode {
     switch (_themeMode) {
       case AppThemeMode.light:
-        return ThemeData.light();
+        return ThemeMode.light;
       case AppThemeMode.dark:
-        return ThemeData.dark();
+        return ThemeMode.dark;
       case AppThemeMode.system:
-        return ThemeData.light(); // For simplicity, default to light
+        return ThemeMode.system;
     }
   }
+
+  // Gunakan colorSchemeSeed untuk tampilan yang lebih profesional (biru karir)
+  ThemeData get lightTheme => ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.blue.shade900,
+        brightness: Brightness.light,
+      );
+
+  ThemeData get darkTheme => ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.blue.shade900,
+        brightness: Brightness.dark,
+      );
 
   void setThemeMode(AppThemeMode mode) {
     _themeMode = mode;
